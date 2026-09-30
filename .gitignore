@@ -10,7 +10,7 @@ dist/
 
 # Local data, generated files & PDFs (Privacy compliance)
 data/
-uploads/
+/uploads/
 *.pdf
 *.log
 

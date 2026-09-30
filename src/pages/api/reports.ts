@@ -48,3 +48,5 @@ export const POST: APIRoute = async ({ request }) => {
     });
   }
 };
+
+export const PUT: APIRoute = POST;

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Upload, FileText, Download, Eye, Save, ZoomIn, ZoomOut, RotateCw, 
   CheckCircle, AlertCircle, Shield, RefreshCw, ChevronRight, Search, 
-  Printer, ArrowLeft, Check, Sparkles, PanelLeftClose, PanelLeftOpen, Maximize2, Columns
+  Printer, ArrowLeft, Check, Sparkles, PanelLeftClose, PanelLeftOpen, Maximize2, Columns,
+  Image as ImageIcon, Camera, AlertTriangle
 } from 'lucide-react';
 import { AuditModal } from './AuditModal';
 
@@ -28,6 +29,7 @@ interface ReportItem {
   urgentFindings?: string;
   urgentCallLog?: string;
   imagePath: string;
+  verbatimTranscription?: string;
   status: string;
   verificationSheetMarkdown?: string;
 }
@@ -46,8 +48,28 @@ export const ReportWorkspace: React.FC = () => {
   // Image viewer states
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
+  const [imageError, setImageError] = useState(false);
+  const [viewMode, setViewMode] = useState<'image' | 'transcription'>('image');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const noteReplaceInputRef = useRef<HTMLInputElement>(null);
+
+  // Image URL resolver helper
+  const getDisplayImageUrl = (pathStr?: string) => {
+    if (!pathStr) return '/assets/sample_note.png';
+    if (pathStr.startsWith('http://') || pathStr.startsWith('https://')) return pathStr;
+    if (pathStr.startsWith('/assets/')) return pathStr;
+    if (pathStr.startsWith('/uploads/')) return pathStr;
+    if (pathStr.startsWith('/api/image')) return pathStr;
+    const filename = pathStr.split(/[/\\]/).pop() || pathStr;
+    return `/api/image?file=${encodeURIComponent(filename)}`;
+  };
+
+  useEffect(() => {
+    setImageError(false);
+    setZoom(1);
+    setRotation(0);
+  }, [selectedReport?.id]);
 
   // Load existing reports from SQLite
   const loadReports = async () => {
@@ -157,6 +179,41 @@ export const ReportWorkspace: React.FC = () => {
       }
     } catch (e) {
       alert('Failed to save changes');
+    }
+  };
+
+  // Replace or attach note image
+  const handleReplaceImage = async (file: File) => {
+    if (!selectedReport) return;
+    setIsLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!uploadRes.ok) throw new Error('Upload failed');
+      const uploadData = await uploadRes.json();
+
+      const updated = { ...selectedReport, imagePath: uploadData.url };
+      setSelectedReport(updated);
+      setImageError(false);
+      setViewMode('image');
+
+      await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+
+      setReports(prev => prev.map(r => r.id === updated.id ? updated : r));
+    } catch (err: any) {
+      alert('Failed to attach note image: ' + err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -357,57 +414,157 @@ export const ReportWorkspace: React.FC = () => {
 
           {/* SPLIT VIEW WORKSPACE: Image on Left, Structured Editor on Right */}
           <div className="flex-1 flex overflow-hidden">
-            {/* LEFT PANE: Senior Handwritten Note Viewer with Zoom Controls */}
+            {/* LEFT PANE: Senior Handwritten Note Viewer with Zoom Controls & Verbatim Transcript */}
             <div className={`${isImagePaneCollapsed ? 'hidden' : 'w-1/2'} border-r border-[#CBD5E1] bg-slate-900 flex flex-col relative overflow-hidden transition-all duration-300 ease-in-out`}>
+              {/* Hidden file input for replacing/attaching note */}
+              <input 
+                type="file" 
+                ref={noteReplaceInputRef} 
+                className="hidden" 
+                accept="image/*"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) handleReplaceImage(e.target.files[0]);
+                }} 
+              />
+
               {/* Viewer Toolbar */}
-              <div className="absolute top-3 left-3 z-10 bg-black/70 backdrop-blur-md rounded-lg p-1 flex items-center gap-1 text-white text-xs border border-white/10">
-                <button 
-                  onClick={() => setZoom(z => Math.min(z + 0.25, 3))}
-                  className="p-1.5 hover:bg-white/20 rounded" 
-                  title="Zoom In"
-                >
-                  <ZoomIn className="h-4 w-4" />
-                </button>
-                <button 
-                  onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))}
-                  className="p-1.5 hover:bg-white/20 rounded" 
-                  title="Zoom Out"
-                >
-                  <ZoomOut className="h-4 w-4" />
-                </button>
-                <button 
-                  onClick={() => { setZoom(1); setRotation(0); }}
-                  className="p-1.5 hover:bg-white/20 rounded text-[10px] font-mono" 
-                  title="Reset"
-                >
-                  100%
-                </button>
-                <button 
-                  onClick={() => setRotation(r => (r + 90) % 360)}
-                  className="p-1.5 hover:bg-white/20 rounded" 
-                  title="Rotate"
-                >
-                  <RotateCw className="h-4 w-4" />
-                </button>
+              <div className="p-2.5 bg-slate-950/95 border-b border-white/10 flex items-center justify-between z-10">
+                {/* View Switcher Tabs */}
+                <div className="flex items-center gap-1 bg-slate-800/90 p-0.5 rounded-lg border border-white/10">
+                  <button
+                    onClick={() => { setViewMode('image'); setImageError(false); }}
+                    className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                      viewMode === 'image' 
+                        ? 'bg-[#2563EB] text-white shadow-sm' 
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <ImageIcon className="h-3.5 w-3.5" />
+                    <span>Note Scan</span>
+                  </button>
+                  <button
+                    onClick={() => setViewMode('transcription')}
+                    className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                      viewMode === 'transcription' 
+                        ? 'bg-[#2563EB] text-white shadow-sm' 
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    <span>Verbatim Text</span>
+                  </button>
+                </div>
+
+                {/* Controls */}
+                <div className="flex items-center gap-1.5 text-white text-xs">
+                  {viewMode === 'image' && (
+                    <div className="flex items-center gap-1 bg-slate-800/90 rounded-lg p-0.5 border border-white/10">
+                      <button 
+                        onClick={() => setZoom(z => Math.min(z + 0.25, 3))}
+                        className="p-1 hover:bg-white/20 rounded text-slate-300 hover:text-white transition-colors" 
+                        title="Zoom In"
+                      >
+                        <ZoomIn className="h-3.5 w-3.5" />
+                      </button>
+                      <button 
+                        onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))}
+                        className="p-1 hover:bg-white/20 rounded text-slate-300 hover:text-white transition-colors" 
+                        title="Zoom Out"
+                      >
+                        <ZoomOut className="h-3.5 w-3.5" />
+                      </button>
+                      <button 
+                        onClick={() => { setZoom(1); setRotation(0); }}
+                        className="px-1.5 py-0.5 hover:bg-white/20 rounded text-[10px] font-mono text-slate-300 hover:text-white transition-colors" 
+                        title="Reset"
+                      >
+                        100%
+                      </button>
+                      <button 
+                        onClick={() => setRotation(r => (r + 90) % 360)}
+                        className="p-1 hover:bg-white/20 rounded text-slate-300 hover:text-white transition-colors" 
+                        title="Rotate"
+                      >
+                        <RotateCw className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => noteReplaceInputRef.current?.click()}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 border border-white/10 transition-colors shadow-sm"
+                    title="Upload or replace note image"
+                  >
+                    <Camera className="h-3.5 w-3.5 text-amber-400" />
+                    <span className="hidden sm:inline">Attach Scan</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Image Canvas */}
-              <div className="flex-1 flex items-center justify-center p-6 overflow-auto">
-                <img 
-                  src={selectedReport.imagePath || '/assets/sample_note.png'} 
-                  alt="Senior Note"
-                  style={{
-                    transform: `scale(${zoom}) rotate(${rotation}deg)`,
-                    transition: 'transform 0.15s ease-out',
-                    maxHeight: '85vh',
-                    objectFit: 'contain'
-                  }}
-                  className="shadow-2xl rounded border border-white/20 max-w-full"
-                />
+              {/* Canvas Area */}
+              <div className="flex-1 flex items-center justify-center p-4 overflow-auto bg-slate-900">
+                {viewMode === 'image' && !imageError ? (
+                  <img 
+                    src={getDisplayImageUrl(selectedReport.imagePath)} 
+                    alt="Senior Radiologist Handwritten Note"
+                    onError={() => setImageError(true)}
+                    style={{
+                      transform: `scale(${zoom}) rotate(${rotation}deg)`,
+                      transition: 'transform 0.15s ease-out',
+                      maxHeight: '82vh',
+                      objectFit: 'contain'
+                    }}
+                    className="shadow-2xl rounded-md border border-white/20 max-w-full"
+                  />
+                ) : (
+                  <div className="w-full max-w-md bg-[#FDFBF7] text-[#0F172A] rounded-lg shadow-2xl p-6 border-l-4 border-l-red-400 border border-slate-300 relative animate-in fade-in duration-200">
+                    <div className="border-b border-slate-300 pb-3 mb-4 flex items-center justify-between">
+                      <div>
+                        <div className="text-[11px] font-extrabold uppercase text-[#0F2C59] tracking-wider">
+                          Gujranwala Teaching Hospital
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-semibold">
+                          Department of Diagnostic Radiology — Consultant Findings
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-mono font-bold px-2 py-0.5 bg-red-100 text-red-700 rounded border border-red-200">
+                        Token #{selectedReport.tokenNumber}
+                      </span>
+                    </div>
+
+                    <div className="space-y-3 font-mono text-xs leading-relaxed text-blue-950 bg-blue-50/50 p-4 rounded border border-blue-100">
+                      <div className="font-bold text-sm text-[#0F2C59] border-b border-blue-200 pb-1.5 flex justify-between items-center font-sans">
+                        <span>Pt: {selectedReport.patientName} ({selectedReport.age} / {selectedReport.gender})</span>
+                        <span className="text-xs text-slate-500">{selectedReport.studyDate}</span>
+                      </div>
+                      <div className="whitespace-pre-wrap font-sans text-xs text-slate-800 leading-relaxed pt-1">
+                        {selectedReport.verbatimTranscription || (
+                          <span className="italic text-slate-400">
+                            {selectedReport.clinicalHistory || 'Primary handwritten findings transcribed and formatted into the clinical report on the right.'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500 italic">
+                        Senior Radiologist Primary Positive Findings
+                      </span>
+                      <button
+                        onClick={() => noteReplaceInputRef.current?.click()}
+                        className="text-[#2563EB] hover:underline font-semibold flex items-center gap-1"
+                      >
+                        <Camera className="h-3 w-3" />
+                        Attach Original Photo
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="p-2 bg-slate-950 text-slate-400 text-[10px] text-center border-t border-white/10">
-                Source: Senior Radiologist Handwritten Positive Findings Note (Unedited Primary Source)
+              <div className="p-2 bg-slate-950 text-slate-400 text-[10px] text-center border-t border-white/10 flex items-center justify-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Source: Senior Radiologist Handwritten Positive Findings Note (Unedited Primary Source)</span>
               </div>
             </div>
 
