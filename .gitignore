@@ -8,10 +8,7 @@ dist/
 .env.*
 !.env.example
 
-# Local data, generated files & PDFs (Privacy compliance)
-data/
-/uploads/
-*.pdf
+# Temporary logs
 *.log
 
 # OS files
