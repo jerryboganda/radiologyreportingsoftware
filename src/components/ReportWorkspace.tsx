@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Upload, FileText, Download, Eye, Save, ZoomIn, ZoomOut, RotateCw, 
   CheckCircle, AlertCircle, Shield, RefreshCw, ChevronRight, Search, 
-  Printer, ArrowLeft, Check, Sparkles
+  Printer, ArrowLeft, Check, Sparkles, PanelLeftClose, PanelLeftOpen, Maximize2, Columns
 } from 'lucide-react';
 import { AuditModal } from './AuditModal';
 
@@ -40,6 +40,8 @@ export const ReportWorkspace: React.FC = () => {
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isImagePaneCollapsed, setIsImagePaneCollapsed] = useState(false);
 
   // Image viewer states
   const [zoom, setZoom] = useState(1);
@@ -167,16 +169,25 @@ export const ReportWorkspace: React.FC = () => {
   return (
     <div className="flex h-screen bg-[#F8FAFC] text-[#0F172A] font-sans overflow-hidden">
       {/* LEFT SIDEBAR: Report Queue & Ingestion */}
-      <div className="w-80 bg-white border-r border-[#CBD5E1] flex flex-col shrink-0">
-        {/* App Title & Brand */}
-        <div className="p-4 border-b border-[#CBD5E1] bg-[#0F2C59] text-white">
-          <div className="flex items-center gap-2 mb-1">
-            <Shield className="h-5 w-5 text-[#2563EB]" />
-            <span className="font-black text-sm tracking-wider uppercase">PolytronX</span>
+      <div className={`${isSidebarCollapsed ? 'w-0 overflow-hidden border-none opacity-0' : 'w-80 border-r border-[#CBD5E1] opacity-100'} bg-white flex flex-col shrink-0 transition-all duration-300 ease-in-out`}>
+        {/* App Title & Brand with Collapse Button */}
+        <div className="p-4 border-b border-[#CBD5E1] bg-[#0F2C59] text-white flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Shield className="h-5 w-5 text-[#2563EB]" />
+              <span className="font-black text-sm tracking-wider uppercase">PolytronX</span>
+            </div>
+            <p className="text-[11px] text-slate-300 font-medium tracking-wide">
+              Radiology Reporting AI Assistant
+            </p>
           </div>
-          <p className="text-[11px] text-slate-300 font-medium tracking-wide">
-            Radiology Reporting AI Assistant
-          </p>
+          <button
+            onClick={() => setIsSidebarCollapsed(true)}
+            className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
+            title="Collapse Sidebar"
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </button>
         </div>
 
         {/* Drag & Drop Upload Zone */}
@@ -275,6 +286,16 @@ export const ReportWorkspace: React.FC = () => {
           {/* Top Bar with 1-Click Action Buttons */}
           <div className="h-14 px-6 bg-white border-b border-[#CBD5E1] flex items-center justify-between shrink-0 shadow-sm">
             <div className="flex items-center gap-3">
+              {isSidebarCollapsed && (
+                <button
+                  onClick={() => setIsSidebarCollapsed(false)}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 shadow-sm transition-colors mr-1"
+                  title="Expand Queue Sidebar"
+                >
+                  <PanelLeftOpen className="h-4 w-4 text-[#2563EB]" />
+                  <span>Queue</span>
+                </button>
+              )}
               <span className="text-sm font-extrabold text-[#0F2C59] tracking-tight uppercase">
                 {selectedReport.patientName}
               </span>
@@ -306,6 +327,15 @@ export const ReportWorkspace: React.FC = () => {
                 {saveSuccess ? 'Saved' : 'Save Draft'}
               </button>
 
+              <button
+                onClick={() => setIsImagePaneCollapsed(!isImagePaneCollapsed)}
+                className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 transition-colors"
+                title={isImagePaneCollapsed ? "Show Source Note" : "Maximize Report Editor"}
+              >
+                {isImagePaneCollapsed ? <Columns className="h-3.5 w-3.5 text-[#2563EB]" /> : <Maximize2 className="h-3.5 w-3.5 text-slate-500" />}
+                <span>{isImagePaneCollapsed ? 'Split View' : 'Focus Mode'}</span>
+              </button>
+
               <a
                 href={`/print/${selectedReport.id}`}
                 target="_blank"
@@ -331,7 +361,7 @@ export const ReportWorkspace: React.FC = () => {
           {/* SPLIT VIEW WORKSPACE: Image on Left, Structured Editor on Right */}
           <div className="flex-1 flex overflow-hidden">
             {/* LEFT PANE: Senior Handwritten Note Viewer with Zoom Controls */}
-            <div className="w-1/2 border-r border-[#CBD5E1] bg-slate-900 flex flex-col relative overflow-hidden">
+            <div className={`${isImagePaneCollapsed ? 'hidden' : 'w-1/2'} border-r border-[#CBD5E1] bg-slate-900 flex flex-col relative overflow-hidden transition-all duration-300 ease-in-out`}>
               {/* Viewer Toolbar */}
               <div className="absolute top-3 left-3 z-10 bg-black/70 backdrop-blur-md rounded-lg p-1 flex items-center gap-1 text-white text-xs border border-white/10">
                 <button 
@@ -385,7 +415,7 @@ export const ReportWorkspace: React.FC = () => {
             </div>
 
             {/* RIGHT PANE: Structured Consultant Report Editor */}
-            <div className="w-1/2 bg-white flex flex-col overflow-y-auto p-6 space-y-4">
+            <div className={`${isImagePaneCollapsed ? 'w-full max-w-5xl mx-auto' : 'w-1/2'} bg-white flex flex-col overflow-y-auto p-6 space-y-4 transition-all duration-300 ease-in-out`}>
               <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                 <span className="text-xs font-bold uppercase text-[#0F2C59] tracking-wider">
                   Report Editor (RadLex Consultant Standard)
