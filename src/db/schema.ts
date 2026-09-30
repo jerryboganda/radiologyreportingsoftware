@@ -24,7 +24,8 @@ export const reports = sqliteTable('reports', {
   verbatimTranscription: text('verbatim_transcription'),
   verificationSheetMarkdown: text('verification_sheet_markdown'),
   auditStatus: text('audit_status').default('PASS'),
-  status: text('status').default('DRAFT'), // DRAFT, REVIEWED, FINALIZED
+  status: text('status').default('DRAFT'), // DRAFT, REVIEWED, FINALIZED, ARCHIVED
+  isArchived: integer('is_archived', { mode: 'boolean' }).default(false),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });

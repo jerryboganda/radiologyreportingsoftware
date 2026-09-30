@@ -41,9 +41,16 @@ await client.execute(`
     verification_sheet_markdown TEXT,
     audit_status TEXT DEFAULT 'PASS',
     status TEXT DEFAULT 'DRAFT',
+    is_archived INTEGER DEFAULT 0,
     created_at INTEGER,
     updated_at INTEGER
   );
 `);
+
+try {
+  await client.execute(`ALTER TABLE reports ADD COLUMN is_archived INTEGER DEFAULT 0;`);
+} catch (e) {
+  // column already exists
+}
 
 export const db = drizzle(client, { schema });

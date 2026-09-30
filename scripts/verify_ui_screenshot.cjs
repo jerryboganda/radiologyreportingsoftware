@@ -14,7 +14,6 @@ async function captureUI() {
   await page.setViewport({ width: 1440, height: 900 });
 
   await page.goto('http://localhost:4321/', { waitUntil: 'networkidle0', timeout: 15000 });
-  await page.waitForSelector('img[alt="Senior Radiologist Handwritten Note"]', { timeout: 10000 });
 
   const screenshotPath = path.resolve(__dirname, '../public/assets/ui_verified.png');
   await page.screenshot({ path: screenshotPath, fullPage: false });

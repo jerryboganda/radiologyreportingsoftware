@@ -3,7 +3,7 @@ import {
   Upload, FileText, Download, Eye, Save, ZoomIn, ZoomOut, RotateCw, 
   CheckCircle, AlertCircle, Shield, RefreshCw, ChevronRight, Search, 
   Printer, ArrowLeft, Check, Sparkles, PanelLeftClose, PanelLeftOpen, Maximize2, Columns,
-  Image as ImageIcon, Camera, AlertTriangle, FolderDown, Move
+  Image as ImageIcon, Camera, AlertTriangle, FolderDown, Move, Trash2, Archive, RotateCcw
 } from 'lucide-react';
 import { AuditModal } from './AuditModal';
 
@@ -31,6 +31,7 @@ interface ReportItem {
   imagePath: string;
   verbatimTranscription?: string;
   status: string;
+  isArchived?: boolean;
   verificationSheetMarkdown?: string;
 }
 
@@ -43,6 +44,7 @@ export const ReportWorkspace: React.FC = () => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [isImagePaneCollapsed, setIsImagePaneCollapsed] = useState(false);
 
   // Image viewer states
@@ -86,10 +88,15 @@ export const ReportWorkspace: React.FC = () => {
     try {
       const res = await fetch('/api/reports');
       if (res.ok) {
-        const data = await res.json();
+        const data: ReportItem[] = await res.json();
         setReports(data);
-        if (data.length > 0 && !selectedReport) {
-          setSelectedReport(data[0]);
+        const active = data.filter(r => !r.isArchived && r.status !== 'ARCHIVED');
+        if (active.length > 0) {
+          if (!selectedReport || selectedReport.isArchived || selectedReport.status === 'ARCHIVED') {
+            setSelectedReport(active[0]);
+          }
+        } else {
+          setSelectedReport(null);
         }
       }
     } catch (e) {
@@ -269,7 +276,52 @@ export const ReportWorkspace: React.FC = () => {
     setIsDragging(false);
   };
 
-  const filteredReports = reports.filter(r => 
+  // Soft-delete: removes from dashboard UI queue while safely preserving row in database
+  const handleDeleteReport = async (e: React.MouseEvent, reportId: string) => {
+    e.stopPropagation();
+    if (!confirm('Remove this case from the active queue? (All clinical data & original scan photos will remain preserved safely in the database archive)')) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/reports?id=${reportId}`, { method: 'DELETE' });
+      if (res.ok) {
+        setReports(prev => prev.map(r => r.id === reportId ? { ...r, isArchived: true, status: 'ARCHIVED' } : r));
+        if (selectedReport?.id === reportId) {
+          const remaining = reports.filter(r => r.id !== reportId && !r.isArchived && r.status !== 'ARCHIVED');
+          setSelectedReport(remaining.length > 0 ? remaining[0] : null);
+        }
+      } else {
+        alert('Failed to remove report from queue');
+      }
+    } catch (err: any) {
+      alert('Error removing report: ' + err.message);
+    }
+  };
+
+  // Restore archived report back to active queue
+  const handleRestoreReport = async (e: React.MouseEvent, reportId: string) => {
+    e.stopPropagation();
+    try {
+      const res = await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: reportId, isArchived: false, status: 'DRAFT' })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setReports(prev => prev.map(r => r.id === reportId ? updated : r));
+        setSelectedReport(updated);
+      }
+    } catch (err: any) {
+      alert('Failed to restore report: ' + err.message);
+    }
+  };
+
+  const activeReports = reports.filter(r => !r.isArchived && r.status !== 'ARCHIVED');
+  const archivedCount = reports.filter(r => r.isArchived || r.status === 'ARCHIVED').length;
+
+  const filteredReports = (showArchived ? reports : activeReports).filter(r => 
     r.patientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     r.tokenNumber.includes(searchQuery) ||
     r.modality.toLowerCase().includes(searchQuery.toLowerCase())
@@ -384,9 +436,28 @@ export const ReportWorkspace: React.FC = () => {
                   <span className="font-bold text-slate-900 truncate uppercase">
                     {r.patientName}
                   </span>
-                  <span className="font-mono text-[10px] font-bold text-[#0F2C59] bg-slate-100 px-1.5 py-0.5 rounded">
-                    #{r.tokenNumber}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-[10px] font-bold text-[#0F2C59] bg-slate-100 px-1.5 py-0.5 rounded">
+                      #{r.tokenNumber}
+                    </span>
+                    {r.isArchived || r.status === 'ARCHIVED' ? (
+                      <button
+                        onClick={(e) => handleRestoreReport(e, r.id)}
+                        className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                        title="Restore to active queue"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => handleDeleteReport(e, r.id)}
+                        className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                        title="Remove from queue (Preserved in database)"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="text-[11px] text-slate-500 truncate mb-1">
                   {r.modality}
@@ -394,17 +465,32 @@ export const ReportWorkspace: React.FC = () => {
                 <div className="flex items-center justify-between text-[10px] text-slate-400">
                   <span>{r.studyDate}</span>
                   <span className={`px-1.5 py-0.2 rounded font-medium ${
-                    r.status === 'FINALIZED' 
-                      ? 'bg-emerald-100 text-emerald-800' 
-                      : 'bg-amber-100 text-amber-800'
+                    r.isArchived || r.status === 'ARCHIVED'
+                      ? 'bg-slate-100 text-slate-600'
+                      : r.status === 'FINALIZED' 
+                        ? 'bg-emerald-100 text-emerald-800' 
+                        : 'bg-amber-100 text-amber-800'
                   }`}>
-                    {r.status}
+                    {r.isArchived || r.status === 'ARCHIVED' ? 'ARCHIVED' : r.status}
                   </span>
                 </div>
               </div>
             ))
           )}
         </div>
+
+        {/* Archive toggle footer */}
+        {archivedCount > 0 && (
+          <div className="p-2 border-t border-slate-200 bg-slate-50 text-center shrink-0">
+            <button
+              onClick={() => setShowArchived(!showArchived)}
+              className="text-[11px] text-slate-500 hover:text-slate-800 font-medium flex items-center justify-center gap-1.5 mx-auto transition-colors"
+            >
+              <Archive className="h-3 w-3 text-slate-400" />
+              <span>{showArchived ? 'Hide Archived' : `Show Archived (${archivedCount})`}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* MAIN SIDE-BY-SIDE REVIEW WORKSPACE */}
@@ -780,12 +866,23 @@ export const ReportWorkspace: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-slate-400">
-          <FileText className="h-12 w-12 text-slate-300 mb-3" />
-          <h3 className="text-base font-bold text-slate-700 mb-1">No Report Selected</h3>
-          <p className="text-xs max-w-sm">
-            Drag and drop a photo of a senior radiologist note onto the upload area on the left to generate your first report.
-          </p>
+        <div className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-slate-50">
+          <div className="max-w-md p-8 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col items-center">
+            <div className="h-12 w-12 rounded-full bg-blue-50 text-[#2563EB] flex items-center justify-center mb-3">
+              <Upload className="h-6 w-6" />
+            </div>
+            <h3 className="text-base font-extrabold text-[#0F2C59] mb-1">Queue Ready for Live Notes</h3>
+            <p className="text-xs text-slate-500 mb-6 leading-relaxed">
+              The previous test entries have been archived. Place your 5 real handwritten note photos into the <code className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-mono text-[11px]">input/</code> folder and click <strong>Sync `input/` Folder</strong>, or drag & drop them directly onto the upload box on the left!
+            </p>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="px-4 py-2 bg-[#0F2C59] hover:bg-[#1E3A8A] text-white rounded-lg text-xs font-bold flex items-center gap-2 shadow-sm transition-all"
+            >
+              <Upload className="h-4 w-4 text-[#2563EB]" />
+              <span>Select Note Image</span>
+            </button>
+          </div>
         </div>
       )}
 
