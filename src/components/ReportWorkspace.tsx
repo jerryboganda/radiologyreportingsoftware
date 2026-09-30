@@ -172,10 +172,10 @@ export const ReportWorkspace: React.FC = () => {
         <div className="p-4 border-b border-[#CBD5E1] bg-[#0F2C59] text-white">
           <div className="flex items-center gap-2 mb-1">
             <Shield className="h-5 w-5 text-[#2563EB]" />
-            <span className="font-black text-sm tracking-wider uppercase">GMCTH Radiology AI</span>
+            <span className="font-black text-sm tracking-wider uppercase">PolytronX</span>
           </div>
-          <p className="text-[11px] text-slate-300">
-            Consultant-Grade Report Generator
+          <p className="text-[11px] text-slate-300 font-medium tracking-wide">
+            Radiology Reporting AI Assistant
           </p>
         </div>
 

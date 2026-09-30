@@ -1,4 +1,4 @@
-# GMCTH Radiology AI Reporting & PDF Platform
+# PolytronX — Radiology Reporting AI Assistant
 
 An autonomous, consultant-grade radiology report generation and publication platform built with **Astro**, **React**, **Tailwind CSS**, and **SQLite (Drizzle ORM)**.
 
