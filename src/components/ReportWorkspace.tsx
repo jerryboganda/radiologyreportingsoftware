@@ -3,7 +3,7 @@ import {
   Upload, FileText, Download, Eye, Save, ZoomIn, ZoomOut, RotateCw, 
   CheckCircle, AlertCircle, Shield, RefreshCw, ChevronRight, Search, 
   Printer, ArrowLeft, Check, Sparkles, PanelLeftClose, PanelLeftOpen, Maximize2, Columns,
-  Image as ImageIcon, Camera, AlertTriangle
+  Image as ImageIcon, Camera, AlertTriangle, FolderDown, Move
 } from 'lucide-react';
 import { AuditModal } from './AuditModal';
 
@@ -51,6 +51,15 @@ export const ReportWorkspace: React.FC = () => {
   const [imageError, setImageError] = useState(false);
   const [viewMode, setViewMode] = useState<'image' | 'transcription'>('image');
 
+  // Pan and drag states for large original photos
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  // Sync input folder states
+  const [isSyncingInput, setIsSyncingInput] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const noteReplaceInputRef = useRef<HTMLInputElement>(null);
 
@@ -69,6 +78,7 @@ export const ReportWorkspace: React.FC = () => {
     setImageError(false);
     setZoom(1);
     setRotation(0);
+    setPan({ x: 0, y: 0 });
   }, [selectedReport?.id]);
 
   // Load existing reports from SQLite
@@ -217,6 +227,48 @@ export const ReportWorkspace: React.FC = () => {
     }
   };
 
+  // Sync images directly from input/ folder
+  const handleSyncInput = async () => {
+    setIsSyncingInput(true);
+    setSyncMessage(null);
+    try {
+      const res = await fetch('/api/sync-input', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        setSyncMessage(data.message);
+        setTimeout(() => setSyncMessage(null), 5000);
+        await loadReports();
+      } else {
+        alert(data.error || 'Failed to sync input folder');
+      }
+    } catch (e: any) {
+      alert('Error syncing input folder: ' + e.message);
+    } finally {
+      setIsSyncingInput(false);
+    }
+  };
+
+  // Smooth drag to pan high-resolution original photos
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (zoom > 1) {
+      setIsDragging(true);
+      setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDragging && zoom > 1) {
+      setPan({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
   const filteredReports = reports.filter(r => 
     r.patientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     r.tokenNumber.includes(searchQuery) ||
@@ -276,6 +328,24 @@ export const ReportWorkspace: React.FC = () => {
                 1-Click auto-transcription & structured report
               </p>
             </div>
+          </div>
+
+          {/* Sync input/ folder button */}
+          <div className="mt-2.5 pt-2 border-t border-slate-200/80">
+            <button
+              onClick={handleSyncInput}
+              disabled={isSyncingInput}
+              className="w-full py-1.5 px-2.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-300 text-xs font-semibold text-slate-700 hover:text-[#0F2C59] flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
+              title="Batch import all handwritten photos placed in c:\Users\Admin\Desktop\CT SCAN GMCTH SEPTEMBER 2026\input\"
+            >
+              <FolderDown className={`h-3.5 w-3.5 text-[#2563EB] ${isSyncingInput ? 'animate-bounce' : ''}`} />
+              <span>{isSyncingInput ? 'Scanning input/ Folder...' : 'Sync `input/` Folder'}</span>
+            </button>
+            {syncMessage && (
+              <p className="mt-1.5 text-[10px] text-emerald-800 font-medium text-center bg-emerald-50 py-1 px-1.5 rounded border border-emerald-200">
+                {syncMessage}
+              </p>
+            )}
           </div>
         </div>
 
@@ -455,6 +525,20 @@ export const ReportWorkspace: React.FC = () => {
                   </button>
                 </div>
 
+                {/* Provenance Badge */}
+                <div className="hidden sm:flex items-center">
+                  {selectedReport.imagePath && selectedReport.imagePath.includes('sample_note.png') ? (
+                    <span className="text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded flex items-center gap-1 shadow-xs">
+                      <span>ℹ️ Sample Tutorial Record</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded flex items-center gap-1.5 shadow-xs truncate max-w-[220px]" title={selectedReport.imagePath}>
+                      <Camera className="h-3 w-3 text-emerald-400 shrink-0" />
+                      <span className="truncate">Original Note: {(selectedReport.imagePath || '').split(/[/\\]/).pop()}</span>
+                    </span>
+                  )}
+                </div>
+
                 {/* Controls */}
                 <div className="flex items-center gap-1.5 text-white text-xs">
                   {viewMode === 'image' && (
@@ -474,9 +558,9 @@ export const ReportWorkspace: React.FC = () => {
                         <ZoomOut className="h-3.5 w-3.5" />
                       </button>
                       <button 
-                        onClick={() => { setZoom(1); setRotation(0); }}
+                        onClick={() => { setZoom(1); setRotation(0); setPan({ x: 0, y: 0 }); }}
                         className="px-1.5 py-0.5 hover:bg-white/20 rounded text-[10px] font-mono text-slate-300 hover:text-white transition-colors" 
-                        title="Reset"
+                        title="Reset 100%"
                       >
                         100%
                       </button>
@@ -501,21 +585,45 @@ export const ReportWorkspace: React.FC = () => {
                 </div>
               </div>
 
-              {/* Canvas Area */}
-              <div className="flex-1 flex items-center justify-center p-4 overflow-auto bg-slate-900">
+              {/* Canvas Area with Smooth Pan & Drag for High-Res Photos */}
+              <div 
+                className="flex-1 flex items-center justify-center p-4 overflow-hidden bg-slate-900 select-none relative"
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              >
+                {/* Pan Hint when zoomed in */}
+                {zoom > 1 && viewMode === 'image' && !imageError && (
+                  <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 bg-black/60 backdrop-blur-sm text-slate-300 text-[10px] px-2.5 py-0.5 rounded-full border border-white/10 pointer-events-none flex items-center gap-1">
+                    <Move className="h-2.5 w-2.5 text-amber-400" />
+                    <span>Drag to pan & inspect handwriting</span>
+                  </div>
+                )}
+
                 {viewMode === 'image' && !imageError ? (
-                  <img 
-                    src={getDisplayImageUrl(selectedReport.imagePath)} 
-                    alt="Senior Radiologist Handwritten Note"
-                    onError={() => setImageError(true)}
+                  <div 
+                    className="relative flex items-center justify-center"
                     style={{
-                      transform: `scale(${zoom}) rotate(${rotation}deg)`,
-                      transition: 'transform 0.15s ease-out',
-                      maxHeight: '82vh',
-                      objectFit: 'contain'
+                      transform: `translate(${pan.x}px, ${pan.y}px)`,
+                      cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'
                     }}
-                    className="shadow-2xl rounded-md border border-white/20 max-w-full"
-                  />
+                    onMouseDown={handleMouseDown}
+                  >
+                    <img 
+                      src={getDisplayImageUrl(selectedReport.imagePath)} 
+                      alt="Senior Radiologist Handwritten Note"
+                      draggable={false}
+                      onError={() => setImageError(true)}
+                      style={{
+                        transform: `scale(${zoom}) rotate(${rotation}deg)`,
+                        transition: isDragging ? 'none' : 'transform 0.15s ease-out',
+                        maxHeight: '82vh',
+                        maxWidth: '90vw',
+                        objectFit: 'contain'
+                      }}
+                      className="shadow-2xl rounded-md border border-white/20 select-none"
+                    />
+                  </div>
                 ) : (
                   <div className="w-full max-w-md bg-[#FDFBF7] text-[#0F172A] rounded-lg shadow-2xl p-6 border-l-4 border-l-red-400 border border-slate-300 relative animate-in fade-in duration-200">
                     <div className="border-b border-slate-300 pb-3 mb-4 flex items-center justify-between">
