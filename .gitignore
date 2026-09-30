@@ -1,0 +1,19 @@
+# Build and runtime
+node_modules/
+dist/
+.astro/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Local data, generated files & PDFs (Privacy compliance)
+data/
+uploads/
+*.pdf
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

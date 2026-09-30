@@ -1,0 +1,565 @@
+---
+import { db } from '../../db';
+import { reports } from '../../db/schema';
+import { eq } from 'drizzle-orm';
+
+const { id } = Astro.params;
+
+if (!id) {
+  return new Response('Report ID required', { status: 400 });
+}
+
+const result = await db.select().from(reports).where(eq(reports.id, id));
+if (!result || result.length === 0) {
+  return new Response('Report not found', { status: 404 });
+}
+
+const report = result[0];
+
+let findingsSections: Array<{ title: string; items: Array<{ structure: string; content: string; isAbnormal?: boolean }> }> = [];
+try {
+  findingsSections = JSON.parse(report.findingsJson);
+} catch (e) {
+  findingsSections = [
+    {
+      title: 'Systemic Findings',
+      items: [{ structure: 'Evaluation', content: report.findingsMarkdown }]
+    }
+  ];
+}
+
+const impressionList: string[] = report.impressionMarkdown
+  .split('\n')
+  .map(line => line.replace(/^\d+[\.\)]\s*/, '').trim())
+  .filter(line => line.length > 0);
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>{report.patientName} - #{report.tokenNumber} - GMCTH Radiology Report</title>
+  <style is:inline>
+    @page {
+      size: A4 portrait;
+      margin: 8mm 10mm 8mm 10mm;
+    }
+    @media print {
+      html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .a4-page {
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #0F172A;
+      background: #E2E8F0;
+      padding: 10px;
+      line-height: 1.3;
+      font-size: 10px;
+    }
+
+    .a4-page {
+      width: 210mm;
+      margin: 0 auto;
+      background: #FFFFFF;
+      padding: 6mm 10mm;
+      position: relative;
+    }
+
+    /* HEADER */
+    .header-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 4px;
+    }
+    .header-table td {
+      vertical-align: middle;
+    }
+    .crest-img {
+      width: 52px;
+      height: 52px;
+      object-fit: contain;
+      display: block;
+    }
+    .inst-gov {
+      font-size: 8px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #64748B;
+      margin-bottom: 1px;
+      text-align: center;
+    }
+    .inst-title {
+      font-size: 14px;
+      font-weight: 900;
+      color: #0F2C59;
+      letter-spacing: -0.01em;
+      text-align: center;
+      margin-bottom: 1px;
+    }
+    .inst-sub {
+      font-size: 10px;
+      font-weight: 700;
+      color: #1E293B;
+      text-align: center;
+      letter-spacing: 0.02em;
+    }
+    .inst-faculty {
+      font-size: 8px;
+      color: #475569;
+      text-align: center;
+      margin-top: 2px;
+    }
+
+    /* ACCENT STRIPE */
+    .accent-stripe {
+      display: table;
+      width: 100%;
+      height: 3px;
+      margin-bottom: 8px;
+    }
+    .stripe-navy {
+      display: table-cell;
+      width: 70%;
+      background-color: #0F2C59;
+    }
+    .stripe-cobalt {
+      display: table-cell;
+      width: 30%;
+      background-color: #2563EB;
+    }
+
+    /* DEMOGRAPHICS TABLE */
+    .meta-box {
+      width: 100%;
+      border: 1px solid #CBD5E1;
+      border-radius: 4px;
+      background: #F8FAFC;
+      border-collapse: collapse;
+      margin-bottom: 8px;
+    }
+    .meta-box td {
+      padding: 3px 6px;
+      font-size: 9.5px;
+      vertical-align: top;
+      border-bottom: 1px solid #E2E8F0;
+    }
+    .meta-label {
+      color: #64748B;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 8.5px;
+      display: block;
+      margin-bottom: 1px;
+    }
+    .meta-val {
+      color: #0F172A;
+      font-weight: 600;
+      font-size: 10.5px;
+    }
+    .meta-token {
+      color: #0F2C59;
+      font-weight: 800;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+    }
+
+    /* SECTION TITLES */
+    .sec-header {
+      font-size: 10.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #0F2C59;
+      border-bottom: 1.5px solid #2563EB;
+      padding-bottom: 2px;
+      margin-top: 8px;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+    .sec-tag {
+      font-size: 8px;
+      color: #94A3B8;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+    }
+
+    /* TECHNIQUE */
+    .technique-text {
+      font-size: 10px;
+      color: #1E293B;
+      line-height: 1.4;
+      margin-bottom: 8px;
+    }
+
+    /* CRITICAL ALERT */
+    .critical-alert {
+      background-color: #FEF2F2;
+      border: 1px solid #FECACA;
+      border-left: 4px solid #DC2626;
+      border-radius: 4px;
+      padding: 6px 10px;
+      margin: 8px 0;
+    }
+    .critical-badge {
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #991B1B;
+      margin-bottom: 2px;
+    }
+    .critical-body {
+      font-size: 10px;
+      font-weight: 700;
+      color: #7F1D1D;
+    }
+    .critical-log {
+      font-size: 8.5px;
+      color: #991B1B;
+      font-style: italic;
+      margin-top: 3px;
+    }
+
+    /* FINDINGS */
+    .organ-group {
+      margin-bottom: 6px;
+      page-break-inside: avoid;
+    }
+    .organ-title {
+      font-size: 9.5px;
+      font-weight: 800;
+      color: #0F2C59;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: #F1F5F9;
+      padding: 2px 6px;
+      border-radius: 2px;
+      display: inline-block;
+      margin-bottom: 2px;
+    }
+    .organ-list {
+      list-style: none;
+      padding-left: 4px;
+    }
+    .organ-item {
+      position: relative;
+      padding-left: 10px;
+      margin-bottom: 2px;
+      font-size: 10px;
+      line-height: 1.35;
+      color: #1E293B;
+    }
+    .organ-item::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      color: #2563EB;
+      font-weight: bold;
+    }
+    .organ-item strong {
+      color: #0F172A;
+      font-weight: 700;
+    }
+    .organ-item.abnormal span {
+      font-weight: 600;
+      color: #020617;
+    }
+
+    /* EXECUTIVE IMPRESSION CARD */
+    .card-impression {
+      border: 1px solid #CBD5E1;
+      border-left: 4px solid #0F2C59;
+      background: #F8FAFC;
+      border-radius: 4px;
+      padding: 8px 12px;
+      margin: 8px 0;
+      page-break-inside: avoid;
+    }
+    .card-title {
+      font-size: 10px;
+      font-weight: 800;
+      color: #0F2C59;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 4px;
+    }
+    .impression-ol {
+      padding-left: 14px;
+      margin-bottom: 6px;
+    }
+    .impression-ol li {
+      font-size: 10px;
+      font-weight: 600;
+      color: #0F172A;
+      margin-bottom: 2px;
+      line-height: 1.35;
+    }
+    .rec-divider {
+      border-top: 1px solid #E2E8F0;
+      padding-top: 4px;
+      margin-top: 4px;
+    }
+    .rec-title {
+      font-size: 8.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: #2563EB;
+      letter-spacing: 0.08em;
+      margin-bottom: 1px;
+    }
+    .rec-body {
+      font-size: 9.5px;
+      color: #1E293B;
+      font-weight: 500;
+      line-height: 1.35;
+    }
+
+    /* FOOTER & SIGNATURES */
+    .footer-block {
+      page-break-inside: avoid;
+      margin-top: 8px;
+    }
+    .sig-table {
+      width: 100%;
+      border-collapse: collapse;
+      border-top: 1px solid #CBD5E1;
+      padding-top: 6px;
+      margin-bottom: 4px;
+    }
+    .sig-table td {
+      vertical-align: top;
+      font-size: 9.5px;
+      padding-top: 6px;
+    }
+    .sig-col-left {
+      width: 50%;
+      border-right: 1px solid #E2E8F0;
+      padding-right: 12px;
+    }
+    .sig-col-right {
+      width: 50%;
+      text-align: right;
+      padding-left: 12px;
+    }
+    .sig-head {
+      font-size: 8px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: #64748B;
+      letter-spacing: 0.08em;
+      margin-bottom: 3px;
+    }
+    .sig-doc {
+      color: #0F172A;
+      font-weight: 700;
+      margin-bottom: 1px;
+    }
+    .sig-sub {
+      color: #64748B;
+      font-size: 8.5px;
+      font-weight: 500;
+    }
+    .sig-hod {
+      font-size: 11px;
+      font-weight: 900;
+      color: #0F2C59;
+    }
+
+    .doc-footer {
+      border-top: 1px solid #E2E8F0;
+      padding-top: 4px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 8px;
+      color: #94A3B8;
+    }
+  </style>
+</head>
+<body>
+  <div class="a4-page">
+    <!-- BODY WRAPPER -->
+    <div>
+      <!-- TOP HEADER WITH VECTOR CRESTS -->
+      <table class="header-table">
+        <tr>
+          <td style="width: 65px;">
+            <img src="/assets/gmc_crest_300dpi.png" alt="GMC Crest" class="crest-img" />
+          </td>
+          <td>
+            <div class="inst-gov">
+              GOVERNMENT OF THE PUNJAB • SPECIALIZED HEALTHCARE & MEDICAL EDUCATION
+            </div>
+            <div class="inst-title">
+              DEPARTMENT OF DIAGNOSTIC RADIOLOGY
+            </div>
+            <div class="inst-sub">
+              GUJRANWALA TEACHING HOSPITAL | GUJRANWALA MEDICAL COLLEGE
+            </div>
+            <div class="inst-faculty">
+              <strong>HOD:</strong> Prof. Dr. Mian Waheed Ahmad &nbsp;•&nbsp; <strong>Senior Registrars:</strong> Dr. Samiya Shahzadi / Dr. Sidra Ghaffar
+            </div>
+          </td>
+          <td style="width: 65px; text-align: right;">
+            <img src="/assets/gth_crest_300dpi.png" alt="GTH Crest" class="crest-img" style="margin-left: auto;" />
+          </td>
+        </tr>
+      </table>
+
+      <!-- 2-CELL ACCENT STRIPE -->
+      <div class="accent-stripe">
+        <div class="stripe-navy"></div>
+        <div class="stripe-cobalt"></div>
+      </div>
+
+      <!-- STRUCTURED DEMOGRAPHICS CARD (shadcn aesthetic) -->
+      <table class="meta-box">
+        <tr>
+          <td style="width: 32%;">
+            <span class="meta-label">Patient Name</span>
+            <span class="meta-val" style="text-transform: uppercase;">{report.patientName}</span>
+          </td>
+          <td style="width: 22%;">
+            <span class="meta-label">Token / Radiology ID</span>
+            <span class="meta-token">#{report.tokenNumber}</span>
+          </td>
+          <td style="width: 22%;">
+            <span class="meta-label">Age / Gender</span>
+            <span class="meta-val">{report.age} / {report.gender}</span>
+          </td>
+          <td style="width: 24%;">
+            <span class="meta-label">Date of Exam</span>
+            <span class="meta-val">{report.studyDate}</span>
+          </td>
+        </tr>
+        <tr>
+          <td colspan="2">
+            <span class="meta-label">Modality & Protocol</span>
+            <span class="meta-val" style="color: #0F2C59;">{report.modality}</span>
+          </td>
+          <td>
+            <span class="meta-label">Reporting Date</span>
+            <span class="meta-val">{report.reportingDate}</span>
+          </td>
+          <td>
+            <span class="meta-label">Referring Clinician</span>
+            <span class="meta-val" style="font-size: 9.5px;">{report.referringClinician || 'General OPD / Inpatient'}</span>
+          </td>
+        </tr>
+        <tr>
+          <td colspan="3" style="border-bottom: none;">
+            <span class="meta-label">Clinical Indication</span>
+            <span style="font-size: 9.5px; color: #334155; font-style: italic;">{report.clinicalHistory || 'Routine diagnostic evaluation as requested.'}</span>
+          </td>
+          <td style="border-bottom: none; text-align: right;">
+            <span class="meta-label">Comparison</span>
+            <span style="font-size: 9px; color: #64748B;">{report.comparison || 'No previous imaging available'}</span>
+          </td>
+        </tr>
+      </table>
+
+      <!-- TECHNIQUE -->
+      <div style="margin-bottom: 6px;">
+        <div class="sec-header">
+          <span>Technique</span>
+          <span class="sec-tag">Acquisition Parameters</span>
+        </div>
+        <p class="technique-text">{report.technique}</p>
+      </div>
+
+      <!-- CRITICAL ALERT (conditional) -->
+      {report.isUrgent && (
+        <div class="critical-alert">
+          <div class="critical-badge">⚠ Critical Clinical Notification</div>
+          <div class="critical-body">{report.urgentFindings || 'Acute radiological finding requiring immediate treating team intervention.'}</div>
+          {report.urgentCallLog && (
+            <div class="critical-log">{report.urgentCallLog}</div>
+          )}
+        </div>
+      )}
+
+      <!-- STRUCTURED FINDINGS (RadLex organ hierarchy) -->
+      <div style="margin-bottom: 6px;">
+        <div class="sec-header">
+          <span>Findings</span>
+          <span class="sec-tag">RadLex Organ Grouping</span>
+        </div>
+        <div class="findings-container">
+          {findingsSections.map((sec) => (
+            <div class="organ-group">
+              <div class="organ-title">{sec.title}</div>
+              <ul class="organ-list">
+                {sec.items.map((item) => (
+                  <li class={`organ-item ${item.isAbnormal ? 'abnormal' : ''}`}>
+                    <strong>{item.structure}: </strong>
+                    <span>{item.content}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <!-- EXECUTIVE IMPRESSION & ACTIONABLE RECOMMENDATIONS CARD -->
+      <div class="card-impression">
+        <div class="card-title">Impression</div>
+        <ol class="impression-ol">
+          {impressionList.map((item) => (
+            <li>{item}</li>
+          ))}
+        </ol>
+        <div class="rec-divider">
+          <div class="rec-title">Recommendations</div>
+          <div class="rec-body">{report.recommendationsMarkdown || 'Clinical and laboratory correlation is advised.'}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SIGNATURES AND FOOTER (Always at bottom) -->
+    <div class="footer-block">
+      <table class="sig-table">
+        <tr>
+          <td class="sig-col-left">
+            <div class="sig-head">Primary Reporting Radiologists</div>
+            <div class="sig-doc">Dr. Sana Fatima <span class="sig-sub">— MBBS (WMO Diagnostic Radiology)</span></div>
+            <div class="sig-doc">Dr. Faisal Maqsood Anwar <span class="sig-sub">— MBBS, FCPS-II Resident</span></div>
+            <div class="sig-doc">Dr. Areeba <span class="sig-sub">— MBBS, FCPS-II Resident</span></div>
+          </td>
+          <td class="sig-col-right">
+            <div class="sig-head">Reviewed & Approved By (Consultants)</div>
+            <div class="sig-hod">Prof. Dr. Mian Waheed Ahmad</div>
+            <div class="sig-sub" style="font-weight: 700; color: #1E293B;">MBBS, FCPS, BSc (Radiology) • Head of Department</div>
+            <div class="sig-sub" style="margin-top: 2px;">Dr. Samiya Shahzadi / Dr. Sidra Ghaffar (Senior Registrars)</div>
+          </td>
+        </tr>
+      </table>
+
+      <div class="doc-footer">
+        <span>Confidential Medical Diagnostic Record • Gujranwala Teaching Hospital (GMCTH)</span>
+        <span style="font-family: ui-monospace, monospace;">Document Ref: GMCTH-{report.tokenNumber}-{report.id.substring(0, 6).toUpperCase()}</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

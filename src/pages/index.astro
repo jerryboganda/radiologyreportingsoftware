@@ -1,0 +1,21 @@
+---
+import { ReportWorkspace } from '../components/ReportWorkspace';
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GMCTH Radiology AI — Consultant Report & PDF Engine</title>
+  <link rel="icon" type="image/png" href="/assets/gmc_crest_300dpi.png" />
+  <style is:global>
+    @tailwind base;
+    @tailwind components;
+    @tailwind utilities;
+  </style>
+</head>
+<body class="bg-[#F8FAFC] antialiased overflow-hidden">
+  <ReportWorkspace client:only="react" />
+</body>
+</html>
