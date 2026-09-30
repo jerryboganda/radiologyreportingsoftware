@@ -62,6 +62,11 @@ export const ReportWorkspace: React.FC = () => {
   const [isSyncingInput, setIsSyncingInput] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
+  // AI Queue states
+  const [isQueueing, setIsQueueing] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [queueMessage, setQueueMessage] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const noteReplaceInputRef = useRef<HTMLInputElement>(null);
 
@@ -94,6 +99,12 @@ export const ReportWorkspace: React.FC = () => {
         if (active.length > 0) {
           if (!selectedReport || selectedReport.isArchived || selectedReport.status === 'ARCHIVED') {
             setSelectedReport(active[0]);
+          } else {
+            // Keep updated state for selected report if changed by worker
+            const updatedSelected = active.find(r => r.id === selectedReport.id);
+            if (updatedSelected) {
+              setSelectedReport(updatedSelected);
+            }
           }
         } else {
           setSelectedReport(null);
@@ -107,6 +118,82 @@ export const ReportWorkspace: React.FC = () => {
   useEffect(() => {
     loadReports();
   }, []);
+
+  // Smart Auto-Polling (Option A): Checks queue and auto-refreshes while jobs are queued or processing
+  useEffect(() => {
+    const hasActiveQueueJobs = reports.some(r => r.status === 'QUEUED' || r.status === 'PROCESSING');
+    if (!hasActiveQueueJobs) return;
+
+    const interval = setInterval(async () => {
+      try {
+        await loadReports();
+      } catch (e) {
+        console.error('Auto-poll error:', e);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [reports]);
+
+  // Manual fallback refresh (Option B)
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await loadReports();
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
+  };
+
+  // Enqueue all unprocessed / draft notes
+  const handleEnqueueAll = async () => {
+    setIsQueueing(true);
+    setQueueMessage(null);
+    try {
+      const res = await fetch('/api/queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'enqueue_all' })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setQueueMessage(data.message);
+        setTimeout(() => setQueueMessage(null), 4000);
+        await loadReports();
+      } else {
+        alert(data.error || 'Failed to queue reports');
+      }
+    } catch (e: any) {
+      alert('Error queueing reports: ' + e.message);
+    } finally {
+      setIsQueueing(false);
+    }
+  };
+
+  // Enqueue single report
+  const handleEnqueueSingle = async (reportId: string) => {
+    setIsQueueing(true);
+    try {
+      const res = await fetch('/api/queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'enqueue_single', reportId })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setReports(prev => prev.map(r => r.id === reportId ? { ...r, status: 'QUEUED' } : r));
+        if (selectedReport?.id === reportId) {
+          setSelectedReport(prev => prev ? { ...prev, status: 'QUEUED' } : null);
+        }
+      } else {
+        alert(data.error || 'Failed to queue report');
+      }
+    } catch (e: any) {
+      alert('Error queueing report: ' + e.message);
+    } finally {
+      setIsQueueing(false);
+    }
+  };
 
   // Handle Drag & Drop / File Upload
   const handleFileUpload = async (file: File) => {
@@ -399,6 +486,34 @@ export const ReportWorkspace: React.FC = () => {
               </p>
             )}
           </div>
+
+          {/* Master Queue for AI - Generation Button */}
+          <div className="mt-2 pt-2 border-t border-slate-200/80">
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={handleEnqueueAll}
+                disabled={isQueueing}
+                className="flex-1 py-1.5 px-2.5 rounded-lg bg-[#0F2C59] hover:bg-[#1E3A8A] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-[0.98] disabled:opacity-50"
+                title="Queue all unprocessed notes into the AI - Generation pipeline"
+              >
+                <Sparkles className={`h-3.5 w-3.5 text-amber-400 ${isQueueing ? 'animate-spin' : ''}`} />
+                <span>{isQueueing ? 'Queueing...' : 'Queue for AI - Generation'}</span>
+              </button>
+              <button
+                onClick={handleManualRefresh}
+                disabled={isRefreshing}
+                className="p-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition-colors shadow-xs"
+                title="Refresh queue and report status"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin text-[#2563EB]' : ''}`} />
+              </button>
+            </div>
+            {queueMessage && (
+              <p className="mt-1.5 text-[10px] text-blue-800 font-medium text-center bg-blue-50 py-1 px-1.5 rounded border border-blue-200">
+                {queueMessage}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Search Bar */}
@@ -464,15 +579,43 @@ export const ReportWorkspace: React.FC = () => {
                 </div>
                 <div className="flex items-center justify-between text-[10px] text-slate-400">
                   <span>{r.studyDate}</span>
-                  <span className={`px-1.5 py-0.2 rounded font-medium ${
-                    r.isArchived || r.status === 'ARCHIVED'
-                      ? 'bg-slate-100 text-slate-600'
-                      : r.status === 'FINALIZED' 
-                        ? 'bg-emerald-100 text-emerald-800' 
-                        : 'bg-amber-100 text-amber-800'
-                  }`}>
-                    {r.isArchived || r.status === 'ARCHIVED' ? 'ARCHIVED' : r.status}
-                  </span>
+                  <div className="flex items-center gap-1">
+                    {r.status === 'QUEUED' ? (
+                      <span className="bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-bold flex items-center gap-1 animate-pulse">
+                        <Sparkles className="h-2.5 w-2.5 text-blue-600" />
+                        Queued for AI
+                      </span>
+                    ) : r.status === 'PROCESSING' ? (
+                      <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold flex items-center gap-1 animate-pulse">
+                        <RefreshCw className="h-2.5 w-2.5 animate-spin text-amber-600" />
+                        Generating...
+                      </span>
+                    ) : (
+                      <>
+                        <span className={`px-1.5 py-0.5 rounded font-medium ${
+                          r.isArchived || r.status === 'ARCHIVED'
+                            ? 'bg-slate-100 text-slate-600'
+                            : r.status === 'FINALIZED' 
+                              ? 'bg-emerald-100 text-emerald-800' 
+                              : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          {r.isArchived || r.status === 'ARCHIVED' ? 'ARCHIVED' : r.status}
+                        </span>
+                        {!r.isArchived && r.status !== 'ARCHIVED' && r.status !== 'FINALIZED' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEnqueueSingle(r.id);
+                            }}
+                            className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
+                            title="Queue for AI - Generation"
+                          >
+                            <Sparkles className="h-3 w-3" />
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             ))
@@ -521,6 +664,30 @@ export const ReportWorkspace: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2.5">
+              {(!selectedReport.isArchived && selectedReport.status !== 'FINALIZED') && (
+                <button
+                  onClick={() => handleEnqueueSingle(selectedReport.id)}
+                  disabled={isQueueing || selectedReport.status === 'QUEUED' || selectedReport.status === 'PROCESSING'}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs ${
+                    selectedReport.status === 'QUEUED'
+                      ? 'border-blue-300 bg-blue-50 text-blue-700 animate-pulse'
+                      : selectedReport.status === 'PROCESSING'
+                      ? 'border-amber-300 bg-amber-50 text-amber-700 animate-pulse'
+                      : 'border-slate-300 bg-white hover:bg-amber-50/50 hover:border-amber-300 text-slate-700 hover:text-amber-900'
+                  }`}
+                  title="Queue this case for AI consultant report generation"
+                >
+                  <Sparkles className={`h-3.5 w-3.5 ${selectedReport.status === 'QUEUED' || selectedReport.status === 'PROCESSING' ? 'text-blue-600 animate-spin' : 'text-amber-500'}`} />
+                  <span>
+                    {selectedReport.status === 'QUEUED'
+                      ? 'In AI Queue...'
+                      : selectedReport.status === 'PROCESSING'
+                      ? 'AI Generating...'
+                      : 'Queue for AI - Generation'}
+                  </span>
+                </button>
+              )}
+
               <button
                 onClick={() => setIsAuditModalOpen(true)}
                 className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 transition-colors"
