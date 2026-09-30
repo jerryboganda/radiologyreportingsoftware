@@ -305,9 +305,6 @@ export const ReportWorkspace: React.FC = () => {
               <span className="text-xs text-slate-500">
                 {selectedReport.age} / {selectedReport.gender}
               </span>
-              <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-semibold">
-                AGENTS.md Passed
-              </span>
             </div>
 
             <div className="flex items-center gap-2.5">
