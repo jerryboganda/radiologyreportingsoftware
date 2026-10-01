@@ -2,6 +2,8 @@
 // live AGENTS.md, and posts the structured result back. One job at a time, no automatic retries.
 // Runs on the Windows host (`npm run worker`); Node built-ins only.
 //   APP_URL          app base URL (default http://localhost:4321)
+//   APP_BASIC_AUTH   "user:password" when the app sits behind the password gate (production)
+//                    A remote APP_URL also makes the worker download each note photo over HTTPS instead of reading uploads/.
 //   AGY_BIN          agy executable (default %LOCALAPPDATA%\agy\bin\agy.exe)
 //   UPLOADS_DIR      where /uploads/<name> lives (default <root>/uploads)
 //   AGY_FAKE_RESULT  test seam: a JSON file used as agy's output instead of running agy
@@ -17,6 +19,10 @@ const APP_URL = (process.env.APP_URL || 'http://localhost:4321').replace(/\/+$/,
 const AGY_DIR = path.join(process.env.LOCALAPPDATA || '', 'agy', 'bin');
 const AGY_BIN = process.env.AGY_BIN || ['agy.exe', 'agy.cmd', 'agy'].map((f) => path.join(AGY_DIR, f)).find((p) => fs.existsSync(p)) || path.join(AGY_DIR, 'agy.exe');
 const AGY_FAKE_RESULT = process.env.AGY_FAKE_RESULT;
+// A password-protected app (production): APP_BASIC_AUTH="user:password".
+const AUTH_HEADER = process.env.APP_BASIC_AUTH ? { Authorization: `Basic ${Buffer.from(process.env.APP_BASIC_AUTH).toString('base64')}` } : {};
+// Only a worker on the same PC as the app may read note photos from the local uploads folder; a remote app's photos are downloaded.
+const APP_IS_LOCAL = ['localhost', '127.0.0.1', '[::1]'].includes(new URL(APP_URL).hostname);
 const MODEL = 'gemini-3.8-flash-high'; // owner rule: always Gemini 3.8 Flash, High thinking. Deliberately not configurable.
 // A full report on Gemini 3.8 Flash (High) took 290 s in the first real run; the app reclaims a stuck case after 15 min.
 const JOB_TIMEOUT_MS = 10 * 60 * 1000;
@@ -31,13 +37,28 @@ const log = (msg) => console.log(`${new Date().toLocaleTimeString()} [worker] ${
 async function post(body) {
   const res = await fetch(`${APP_URL}/api/queue`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(30_000),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`${body.action}: HTTP ${res.status} ${JSON.stringify(data.errors ?? data.error ?? data)}`);
   return data;
+}
+
+const IMAGE_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
+
+/** Remote app: fetches '/uploads/<name>' over HTTPS into the work folder. Returns the local file path. */
+async function downloadImage(imagePath) {
+  if (typeof imagePath !== 'string' || !imagePath.startsWith('/uploads/')) return null;
+  const res = await fetch(`${APP_URL}${encodeURI(imagePath)}`, { headers: AUTH_HEADER, signal: AbortSignal.timeout(60_000) });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`could not download the note photo: HTTP ${res.status}`);
+  const ext = IMAGE_EXT[(res.headers.get('content-type') || '').split(';')[0].trim()];
+  if (!ext) throw new Error(`the note photo download was not an image (${res.headers.get('content-type')})`);
+  const file = path.join(WORK_DIR, `download${ext}`);
+  fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+  return file;
 }
 
 /** '/uploads/<name>' → the local file, or null. The raw name is tried first (input/ imports keep raw names). */
@@ -199,7 +220,7 @@ function parseResult(output) {
 
 function cleanWorkDir() {
   for (const f of fs.readdirSync(WORK_DIR)) {
-    if (f.startsWith('current')) fs.rmSync(path.join(WORK_DIR, f), { force: true });
+    if (f.startsWith('current') || f.startsWith('download')) fs.rmSync(path.join(WORK_DIR, f), { force: true });
   }
 }
 
@@ -209,7 +230,7 @@ async function runJob(report) {
   job = { id: report.id, child: null };
   log(`${tag}: claimed`);
   try {
-    const image = resolveImage(report.imagePath);
+    const image = APP_IS_LOCAL ? resolveImage(report.imagePath) : await downloadImage(report.imagePath);
     if (!image) throw new Error('Source image missing');
     const imageRel = `.worker/current${path.extname(image).toLowerCase()}`;
     fs.copyFileSync(image, path.join(ROOT, imageRel));

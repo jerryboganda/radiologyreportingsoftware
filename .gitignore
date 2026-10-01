@@ -31,3 +31,6 @@ input/
 screenshot_*.png
 server*.log
 worker*.log
+
+# Machine-specific launchers that hold the production password
+start-worker-production.cmd

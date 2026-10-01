@@ -26,7 +26,8 @@ export const GET: APIRoute = async ({ params }) => {
     status: 200,
     headers: {
       'Content-Type': contentType,
-      'Cache-Control': 'public, max-age=3600',
+      // Patient photos: never cacheable by a shared cache (Cloudflare) or the browser.
+      'Cache-Control': 'private, no-store',
       'Content-Length': buffer.length.toString(),
       'X-Content-Type-Options': 'nosniff'
     }

@@ -1,5 +1,6 @@
 import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
+import { selfAuthHeaders } from '../auth';
 
 const CHROME_PATHS = [
   ...(process.env.CHROME_PATH ? [process.env.CHROME_PATH] : []),
@@ -21,11 +22,14 @@ export async function generatePdfFromUrl(url: string): Promise<Buffer> {
   const browser = await puppeteer.launch({
     executablePath,
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu']
+    // --disable-dev-shm-usage: a container's /dev/shm is tiny and would crash Chromium on larger pages.
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-dev-shm-usage']
   });
 
   try {
     const page = await browser.newPage();
+    // The print route sits behind the same password gate as everything else.
+    await page.setExtraHTTPHeaders(selfAuthHeaders());
     // Navigate to local print route
     await page.goto(url, { waitUntil: 'networkidle0', timeout: 30000 });
     

@@ -4,6 +4,8 @@
 import assert from 'node:assert/strict';
 
 const BASE = (process.argv[2] || 'http://127.0.0.1:4399').replace(/\/+$/, '');
+// API_AUTH="user:password" when the server runs with BASIC_AUTH_PASS (the PDF step then proves the print route works behind the gate).
+const AUTH = process.env.API_AUTH ? { Authorization: `Basic ${Buffer.from(process.env.API_AUTH).toString('base64')}` } : {};
 const PNG_1X1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 const d = new Date();
 const TODAY = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -41,11 +43,11 @@ const BLOCKED = {
 };
 
 async function call(method, path, body) {
-  const init = { method };
+  const init = { method, headers: { ...AUTH } };
   if (body instanceof FormData) init.body = body;
   else if (body !== undefined) {
     init.body = JSON.stringify(body);
-    init.headers = { 'Content-Type': 'application/json' };
+    init.headers = { ...AUTH, 'Content-Type': 'application/json' };
   }
   const res = await fetch(BASE + path, init);
   const type = res.headers.get('content-type') ?? '';
