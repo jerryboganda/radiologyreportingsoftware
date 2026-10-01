@@ -1,0 +1,1156 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-01T21:46:41.467Z",
+  "title": "Design System: PolytronX",
+  "extensions": {
+    "colorMeta": {
+      "brand": {
+        "role": "primary",
+        "displayName": "Letterhead Navy",
+        "canonical": "oklch(30.0% 0.088 259.1)",
+        "tonalRamp": [
+          "oklch(15.0% 0.088 259.1)",
+          "oklch(26.4% 0.088 259.1)",
+          "oklch(37.9% 0.088 259.1)",
+          "oklch(49.3% 0.088 259.1)",
+          "oklch(60.7% 0.088 259.1)",
+          "oklch(72.1% 0.088 259.1)",
+          "oklch(83.6% 0.088 259.1)",
+          "oklch(95.0% 0.088 259.1)"
+        ]
+      },
+      "brand-ink": {
+        "role": "primary",
+        "displayName": "Navy Ink",
+        "canonical": "oklch(30.0% 0.088 259.1)",
+        "tonalRamp": [
+          "oklch(15.0% 0.088 259.1)",
+          "oklch(26.4% 0.088 259.1)",
+          "oklch(37.9% 0.088 259.1)",
+          "oklch(49.3% 0.088 259.1)",
+          "oklch(60.7% 0.088 259.1)",
+          "oklch(72.1% 0.088 259.1)",
+          "oklch(83.6% 0.088 259.1)",
+          "oklch(95.0% 0.088 259.1)"
+        ]
+      },
+      "accent": {
+        "role": "secondary",
+        "displayName": "Report Cobalt",
+        "canonical": "oklch(54.6% 0.215 262.9)",
+        "tonalRamp": [
+          "oklch(15.0% 0.215 262.9)",
+          "oklch(26.4% 0.215 262.9)",
+          "oklch(37.9% 0.215 262.9)",
+          "oklch(49.3% 0.215 262.9)",
+          "oklch(60.7% 0.215 262.9)",
+          "oklch(72.1% 0.215 262.9)",
+          "oklch(83.6% 0.215 262.9)",
+          "oklch(95.0% 0.215 262.9)"
+        ]
+      },
+      "accent-soft": {
+        "role": "secondary",
+        "displayName": "Cobalt Wash",
+        "canonical": "oklch(95.7% 0.019 263.0)",
+        "tonalRamp": [
+          "oklch(15.0% 0.019 263.0)",
+          "oklch(26.4% 0.019 263.0)",
+          "oklch(37.9% 0.019 263.0)",
+          "oklch(49.3% 0.019 263.0)",
+          "oklch(60.7% 0.019 263.0)",
+          "oklch(72.1% 0.019 263.0)",
+          "oklch(83.6% 0.019 263.0)",
+          "oklch(95.0% 0.019 263.0)"
+        ]
+      },
+      "on-accent": {
+        "role": "secondary",
+        "displayName": "On Accent",
+        "canonical": "oklch(100.0% 0.000 0.0)",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 0.0)",
+          "oklch(26.4% 0.000 0.0)",
+          "oklch(37.9% 0.000 0.0)",
+          "oklch(49.3% 0.000 0.0)",
+          "oklch(60.7% 0.000 0.0)",
+          "oklch(72.1% 0.000 0.0)",
+          "oklch(83.6% 0.000 0.0)",
+          "oklch(95.0% 0.000 0.0)"
+        ]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Cool Canvas",
+        "canonical": "oklch(95.4% 0.009 258.3)",
+        "tonalRamp": [
+          "oklch(15.0% 0.009 258.3)",
+          "oklch(26.4% 0.009 258.3)",
+          "oklch(37.9% 0.009 258.3)",
+          "oklch(49.3% 0.009 258.3)",
+          "oklch(60.7% 0.009 258.3)",
+          "oklch(72.1% 0.009 258.3)",
+          "oklch(83.6% 0.009 258.3)",
+          "oklch(95.0% 0.009 258.3)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "oklch(100.0% 0.000 0.0)",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 0.0)",
+          "oklch(26.4% 0.000 0.0)",
+          "oklch(37.9% 0.000 0.0)",
+          "oklch(49.3% 0.000 0.0)",
+          "oklch(60.7% 0.000 0.0)",
+          "oklch(72.1% 0.000 0.0)",
+          "oklch(83.6% 0.000 0.0)",
+          "oklch(95.0% 0.000 0.0)"
+        ]
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Surface 2",
+        "canonical": "oklch(97.8% 0.005 258.3)",
+        "tonalRamp": [
+          "oklch(15.0% 0.005 258.3)",
+          "oklch(26.4% 0.005 258.3)",
+          "oklch(37.9% 0.005 258.3)",
+          "oklch(49.3% 0.005 258.3)",
+          "oklch(60.7% 0.005 258.3)",
+          "oklch(72.1% 0.005 258.3)",
+          "oklch(83.6% 0.005 258.3)",
+          "oklch(95.0% 0.005 258.3)"
+        ]
+      },
+      "surface-3": {
+        "role": "neutral",
+        "displayName": "Surface 3",
+        "canonical": "oklch(95.7% 0.008 253.9)",
+        "tonalRamp": [
+          "oklch(15.0% 0.008 253.9)",
+          "oklch(26.4% 0.008 253.9)",
+          "oklch(37.9% 0.008 253.9)",
+          "oklch(49.3% 0.008 253.9)",
+          "oklch(60.7% 0.008 253.9)",
+          "oklch(72.1% 0.008 253.9)",
+          "oklch(83.6% 0.008 253.9)",
+          "oklch(95.0% 0.008 253.9)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "oklch(92.6% 0.013 255.5)",
+        "tonalRamp": [
+          "oklch(15.0% 0.013 255.5)",
+          "oklch(26.4% 0.013 255.5)",
+          "oklch(37.9% 0.013 255.5)",
+          "oklch(49.3% 0.013 255.5)",
+          "oklch(60.7% 0.013 255.5)",
+          "oklch(72.1% 0.013 255.5)",
+          "oklch(83.6% 0.013 255.5)",
+          "oklch(95.0% 0.013 255.5)"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Strong Line",
+        "canonical": "oklch(86.9% 0.020 252.9)",
+        "tonalRamp": [
+          "oklch(15.0% 0.020 252.9)",
+          "oklch(26.4% 0.020 252.9)",
+          "oklch(37.9% 0.020 252.9)",
+          "oklch(49.3% 0.020 252.9)",
+          "oklch(60.7% 0.020 252.9)",
+          "oklch(72.1% 0.020 252.9)",
+          "oklch(83.6% 0.020 252.9)",
+          "oklch(95.0% 0.020 252.9)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "oklch(20.8% 0.040 265.8)",
+        "tonalRamp": [
+          "oklch(15.0% 0.040 265.8)",
+          "oklch(26.4% 0.040 265.8)",
+          "oklch(37.9% 0.040 265.8)",
+          "oklch(49.3% 0.040 265.8)",
+          "oklch(60.7% 0.040 265.8)",
+          "oklch(72.1% 0.040 265.8)",
+          "oklch(83.6% 0.040 265.8)",
+          "oklch(95.0% 0.040 265.8)"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Ink 2",
+        "canonical": "oklch(37.2% 0.039 257.3)",
+        "tonalRamp": [
+          "oklch(15.0% 0.039 257.3)",
+          "oklch(26.4% 0.039 257.3)",
+          "oklch(37.9% 0.039 257.3)",
+          "oklch(49.3% 0.039 257.3)",
+          "oklch(60.7% 0.039 257.3)",
+          "oklch(72.1% 0.039 257.3)",
+          "oklch(83.6% 0.039 257.3)",
+          "oklch(95.0% 0.039 257.3)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "canonical": "oklch(49.2% 0.038 258.4)",
+        "tonalRamp": [
+          "oklch(15.0% 0.038 258.4)",
+          "oklch(26.4% 0.038 258.4)",
+          "oklch(37.9% 0.038 258.4)",
+          "oklch(49.3% 0.038 258.4)",
+          "oklch(60.7% 0.038 258.4)",
+          "oklch(72.1% 0.038 258.4)",
+          "oklch(83.6% 0.038 258.4)",
+          "oklch(95.0% 0.038 258.4)"
+        ]
+      },
+      "faint": {
+        "role": "neutral",
+        "displayName": "Faint",
+        "canonical": "oklch(55.5% 0.033 257.8)",
+        "tonalRamp": [
+          "oklch(15.0% 0.033 257.8)",
+          "oklch(26.4% 0.033 257.8)",
+          "oklch(37.9% 0.033 257.8)",
+          "oklch(49.3% 0.033 257.8)",
+          "oklch(60.7% 0.033 257.8)",
+          "oklch(72.1% 0.033 257.8)",
+          "oklch(83.6% 0.033 257.8)",
+          "oklch(95.0% 0.033 257.8)"
+        ]
+      },
+      "success": {
+        "role": "tertiary",
+        "displayName": "Verified Green",
+        "canonical": "oklch(50.8% 0.105 165.6)",
+        "tonalRamp": [
+          "oklch(15.0% 0.105 165.6)",
+          "oklch(26.4% 0.105 165.6)",
+          "oklch(37.9% 0.105 165.6)",
+          "oklch(49.3% 0.105 165.6)",
+          "oklch(60.7% 0.105 165.6)",
+          "oklch(72.1% 0.105 165.6)",
+          "oklch(83.6% 0.105 165.6)",
+          "oklch(95.0% 0.105 165.6)"
+        ]
+      },
+      "success-soft": {
+        "role": "tertiary",
+        "displayName": "Verified Green Wash",
+        "canonical": "oklch(95.7% 0.018 166.4)",
+        "tonalRamp": [
+          "oklch(15.0% 0.018 166.4)",
+          "oklch(26.4% 0.018 166.4)",
+          "oklch(37.9% 0.018 166.4)",
+          "oklch(49.3% 0.018 166.4)",
+          "oklch(60.7% 0.018 166.4)",
+          "oklch(72.1% 0.018 166.4)",
+          "oklch(83.6% 0.018 166.4)",
+          "oklch(95.0% 0.018 166.4)"
+        ]
+      },
+      "warning": {
+        "role": "tertiary",
+        "displayName": "Clarification Amber",
+        "canonical": "oklch(55.5% 0.146 49.0)",
+        "tonalRamp": [
+          "oklch(15.0% 0.146 49.0)",
+          "oklch(26.4% 0.146 49.0)",
+          "oklch(37.9% 0.146 49.0)",
+          "oklch(49.3% 0.146 49.0)",
+          "oklch(60.7% 0.146 49.0)",
+          "oklch(72.1% 0.146 49.0)",
+          "oklch(83.6% 0.146 49.0)",
+          "oklch(95.0% 0.146 49.0)"
+        ]
+      },
+      "warning-soft": {
+        "role": "tertiary",
+        "displayName": "Clarification Amber Wash",
+        "canonical": "oklch(96.8% 0.023 78.2)",
+        "tonalRamp": [
+          "oklch(15.0% 0.023 78.2)",
+          "oklch(26.4% 0.023 78.2)",
+          "oklch(37.9% 0.023 78.2)",
+          "oklch(49.3% 0.023 78.2)",
+          "oklch(60.7% 0.023 78.2)",
+          "oklch(72.1% 0.023 78.2)",
+          "oklch(83.6% 0.023 78.2)",
+          "oklch(95.0% 0.023 78.2)"
+        ]
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "Failure Red",
+        "canonical": "oklch(53.5% 0.203 27.6)",
+        "tonalRamp": [
+          "oklch(15.0% 0.203 27.6)",
+          "oklch(26.4% 0.203 27.6)",
+          "oklch(37.9% 0.203 27.6)",
+          "oklch(49.3% 0.203 27.6)",
+          "oklch(60.7% 0.203 27.6)",
+          "oklch(72.1% 0.203 27.6)",
+          "oklch(83.6% 0.203 27.6)",
+          "oklch(95.0% 0.203 27.6)"
+        ]
+      },
+      "danger-soft": {
+        "role": "tertiary",
+        "displayName": "Failure Red Wash",
+        "canonical": "oklch(96.1% 0.016 17.4)",
+        "tonalRamp": [
+          "oklch(15.0% 0.016 17.4)",
+          "oklch(26.4% 0.016 17.4)",
+          "oklch(37.9% 0.016 17.4)",
+          "oklch(49.3% 0.016 17.4)",
+          "oklch(60.7% 0.016 17.4)",
+          "oklch(72.1% 0.016 17.4)",
+          "oklch(83.6% 0.016 17.4)",
+          "oklch(95.0% 0.016 17.4)"
+        ]
+      },
+      "sheet": {
+        "role": "neutral",
+        "displayName": "Sheet",
+        "canonical": "oklch(100.0% 0.000 0.0)",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 0.0)",
+          "oklch(26.4% 0.000 0.0)",
+          "oklch(37.9% 0.000 0.0)",
+          "oklch(49.3% 0.000 0.0)",
+          "oklch(60.7% 0.000 0.0)",
+          "oklch(72.1% 0.000 0.0)",
+          "oklch(83.6% 0.000 0.0)",
+          "oklch(95.0% 0.000 0.0)"
+        ]
+      },
+      "sheet-ink": {
+        "role": "neutral",
+        "displayName": "Sheet Ink",
+        "canonical": "oklch(20.8% 0.040 265.8)",
+        "tonalRamp": [
+          "oklch(15.0% 0.040 265.8)",
+          "oklch(26.4% 0.040 265.8)",
+          "oklch(37.9% 0.040 265.8)",
+          "oklch(49.3% 0.040 265.8)",
+          "oklch(60.7% 0.040 265.8)",
+          "oklch(72.1% 0.040 265.8)",
+          "oklch(83.6% 0.040 265.8)",
+          "oklch(95.0% 0.040 265.8)"
+        ]
+      },
+      "sheet-line": {
+        "role": "neutral",
+        "displayName": "Sheet Line",
+        "canonical": "oklch(92.9% 0.013 255.5)",
+        "tonalRamp": [
+          "oklch(15.0% 0.013 255.5)",
+          "oklch(26.4% 0.013 255.5)",
+          "oklch(37.9% 0.013 255.5)",
+          "oklch(49.3% 0.013 255.5)",
+          "oklch(60.7% 0.013 255.5)",
+          "oklch(72.1% 0.013 255.5)",
+          "oklch(83.6% 0.013 255.5)",
+          "oklch(95.0% 0.013 255.5)"
+        ]
+      },
+      "sheet-tint": {
+        "role": "neutral",
+        "displayName": "Sheet Tint",
+        "canonical": "oklch(96.8% 0.007 247.9)",
+        "tonalRamp": [
+          "oklch(15.0% 0.007 247.9)",
+          "oklch(26.4% 0.007 247.9)",
+          "oklch(37.9% 0.007 247.9)",
+          "oklch(49.3% 0.007 247.9)",
+          "oklch(60.7% 0.007 247.9)",
+          "oklch(72.1% 0.007 247.9)",
+          "oklch(83.6% 0.007 247.9)",
+          "oklch(95.0% 0.007 247.9)"
+        ]
+      },
+      "lightbox": {
+        "role": "neutral",
+        "displayName": "Light Box",
+        "canonical": "oklch(16.3% 0.016 261.5)",
+        "tonalRamp": [
+          "oklch(15.0% 0.016 261.5)",
+          "oklch(26.4% 0.016 261.5)",
+          "oklch(37.9% 0.016 261.5)",
+          "oklch(49.3% 0.016 261.5)",
+          "oklch(60.7% 0.016 261.5)",
+          "oklch(72.1% 0.016 261.5)",
+          "oklch(83.6% 0.016 261.5)",
+          "oklch(95.0% 0.016 261.5)"
+        ]
+      },
+      "lightbox-glass": {
+        "role": "neutral",
+        "displayName": "Light Box Glass",
+        "canonical": "oklch(18.1% 0.023 260.4)",
+        "tonalRamp": [
+          "oklch(15.0% 0.023 260.4)",
+          "oklch(26.4% 0.023 260.4)",
+          "oklch(37.9% 0.023 260.4)",
+          "oklch(49.3% 0.023 260.4)",
+          "oklch(60.7% 0.023 260.4)",
+          "oklch(72.1% 0.023 260.4)",
+          "oklch(83.6% 0.023 260.4)",
+          "oklch(95.0% 0.023 260.4)"
+        ]
+      },
+      "note-paper": {
+        "role": "neutral",
+        "displayName": "Note Paper",
+        "canonical": "oklch(98.5% 0.004 91.4)",
+        "tonalRamp": [
+          "oklch(15.0% 0.004 91.4)",
+          "oklch(26.4% 0.004 91.4)",
+          "oklch(37.9% 0.004 91.4)",
+          "oklch(49.3% 0.004 91.4)",
+          "oklch(60.7% 0.004 91.4)",
+          "oklch(72.1% 0.004 91.4)",
+          "oklch(83.6% 0.004 91.4)",
+          "oklch(95.0% 0.004 91.4)"
+        ]
+      },
+      "brand-dark": {
+        "role": "primary",
+        "displayName": "Letterhead Navy (dark theme)",
+        "canonical": "oklch(56.9% 0.181 263.2)",
+        "tonalRamp": [
+          "oklch(15.0% 0.181 263.2)",
+          "oklch(26.4% 0.181 263.2)",
+          "oklch(37.9% 0.181 263.2)",
+          "oklch(49.3% 0.181 263.2)",
+          "oklch(60.7% 0.181 263.2)",
+          "oklch(72.1% 0.181 263.2)",
+          "oklch(83.6% 0.181 263.2)",
+          "oklch(95.0% 0.181 263.2)"
+        ]
+      },
+      "brand-ink-dark": {
+        "role": "primary",
+        "displayName": "Navy Ink (dark theme)",
+        "canonical": "oklch(82.7% 0.075 266.2)",
+        "tonalRamp": [
+          "oklch(15.0% 0.075 266.2)",
+          "oklch(26.4% 0.075 266.2)",
+          "oklch(37.9% 0.075 266.2)",
+          "oklch(49.3% 0.075 266.2)",
+          "oklch(60.7% 0.075 266.2)",
+          "oklch(72.1% 0.075 266.2)",
+          "oklch(83.6% 0.075 266.2)",
+          "oklch(95.0% 0.075 266.2)"
+        ]
+      },
+      "accent-dark": {
+        "role": "secondary",
+        "displayName": "Report Cobalt (dark theme)",
+        "canonical": "oklch(72.6% 0.133 264.8)",
+        "tonalRamp": [
+          "oklch(15.0% 0.133 264.8)",
+          "oklch(26.4% 0.133 264.8)",
+          "oklch(37.9% 0.133 264.8)",
+          "oklch(49.3% 0.133 264.8)",
+          "oklch(60.7% 0.133 264.8)",
+          "oklch(72.1% 0.133 264.8)",
+          "oklch(83.6% 0.133 264.8)",
+          "oklch(95.0% 0.133 264.8)"
+        ]
+      },
+      "accent-soft-dark": {
+        "role": "secondary",
+        "displayName": "Cobalt Wash (dark theme)",
+        "canonical": "oklch(28.8% 0.059 263.1)",
+        "tonalRamp": [
+          "oklch(15.0% 0.059 263.1)",
+          "oklch(26.4% 0.059 263.1)",
+          "oklch(37.9% 0.059 263.1)",
+          "oklch(49.3% 0.059 263.1)",
+          "oklch(60.7% 0.059 263.1)",
+          "oklch(72.1% 0.059 263.1)",
+          "oklch(83.6% 0.059 263.1)",
+          "oklch(95.0% 0.059 263.1)"
+        ]
+      },
+      "canvas-dark": {
+        "role": "neutral",
+        "displayName": "Cool Canvas (dark theme)",
+        "canonical": "oklch(15.9% 0.018 263.7)",
+        "tonalRamp": [
+          "oklch(15.0% 0.018 263.7)",
+          "oklch(26.4% 0.018 263.7)",
+          "oklch(37.9% 0.018 263.7)",
+          "oklch(49.3% 0.018 263.7)",
+          "oklch(60.7% 0.018 263.7)",
+          "oklch(72.1% 0.018 263.7)",
+          "oklch(83.6% 0.018 263.7)",
+          "oklch(95.0% 0.018 263.7)"
+        ]
+      },
+      "surface-dark": {
+        "role": "neutral",
+        "displayName": "Surface (dark theme)",
+        "canonical": "oklch(20.0% 0.026 263.7)",
+        "tonalRamp": [
+          "oklch(15.0% 0.026 263.7)",
+          "oklch(26.4% 0.026 263.7)",
+          "oklch(37.9% 0.026 263.7)",
+          "oklch(49.3% 0.026 263.7)",
+          "oklch(60.7% 0.026 263.7)",
+          "oklch(72.1% 0.026 263.7)",
+          "oklch(83.6% 0.026 263.7)",
+          "oklch(95.0% 0.026 263.7)"
+        ]
+      },
+      "surface-2-dark": {
+        "role": "neutral",
+        "displayName": "Surface 2 (dark theme)",
+        "canonical": "oklch(22.2% 0.029 263.7)",
+        "tonalRamp": [
+          "oklch(15.0% 0.029 263.7)",
+          "oklch(26.4% 0.029 263.7)",
+          "oklch(37.9% 0.029 263.7)",
+          "oklch(49.3% 0.029 263.7)",
+          "oklch(60.7% 0.029 263.7)",
+          "oklch(72.1% 0.029 263.7)",
+          "oklch(83.6% 0.029 263.7)",
+          "oklch(95.0% 0.029 263.7)"
+        ]
+      },
+      "surface-3-dark": {
+        "role": "neutral",
+        "displayName": "Surface 3 (dark theme)",
+        "canonical": "oklch(26.0% 0.035 262.7)",
+        "tonalRamp": [
+          "oklch(15.0% 0.035 262.7)",
+          "oklch(26.4% 0.035 262.7)",
+          "oklch(37.9% 0.035 262.7)",
+          "oklch(49.3% 0.035 262.7)",
+          "oklch(60.7% 0.035 262.7)",
+          "oklch(72.1% 0.035 262.7)",
+          "oklch(83.6% 0.035 262.7)",
+          "oklch(95.0% 0.035 262.7)"
+        ]
+      },
+      "line-dark": {
+        "role": "neutral",
+        "displayName": "Hairline (dark theme)",
+        "canonical": "oklch(28.8% 0.037 260.0)",
+        "tonalRamp": [
+          "oklch(15.0% 0.037 260.0)",
+          "oklch(26.4% 0.037 260.0)",
+          "oklch(37.9% 0.037 260.0)",
+          "oklch(49.3% 0.037 260.0)",
+          "oklch(60.7% 0.037 260.0)",
+          "oklch(72.1% 0.037 260.0)",
+          "oklch(83.6% 0.037 260.0)",
+          "oklch(95.0% 0.037 260.0)"
+        ]
+      },
+      "line-strong-dark": {
+        "role": "neutral",
+        "displayName": "Strong Line (dark theme)",
+        "canonical": "oklch(35.4% 0.043 259.3)",
+        "tonalRamp": [
+          "oklch(15.0% 0.043 259.3)",
+          "oklch(26.4% 0.043 259.3)",
+          "oklch(37.9% 0.043 259.3)",
+          "oklch(49.3% 0.043 259.3)",
+          "oklch(60.7% 0.043 259.3)",
+          "oklch(72.1% 0.043 259.3)",
+          "oklch(83.6% 0.043 259.3)",
+          "oklch(95.0% 0.043 259.3)"
+        ]
+      },
+      "ink-dark": {
+        "role": "neutral",
+        "displayName": "Ink (dark theme)",
+        "canonical": "oklch(94.1% 0.011 256.7)",
+        "tonalRamp": [
+          "oklch(15.0% 0.011 256.7)",
+          "oklch(26.4% 0.011 256.7)",
+          "oklch(37.9% 0.011 256.7)",
+          "oklch(49.3% 0.011 256.7)",
+          "oklch(60.7% 0.011 256.7)",
+          "oklch(72.1% 0.011 256.7)",
+          "oklch(83.6% 0.011 256.7)",
+          "oklch(95.0% 0.011 256.7)"
+        ]
+      },
+      "ink-2-dark": {
+        "role": "neutral",
+        "displayName": "Ink 2 (dark theme)",
+        "canonical": "oklch(84.5% 0.021 257.5)",
+        "tonalRamp": [
+          "oklch(15.0% 0.021 257.5)",
+          "oklch(26.4% 0.021 257.5)",
+          "oklch(37.9% 0.021 257.5)",
+          "oklch(49.3% 0.021 257.5)",
+          "oklch(60.7% 0.021 257.5)",
+          "oklch(72.1% 0.021 257.5)",
+          "oklch(83.6% 0.021 257.5)",
+          "oklch(95.0% 0.021 257.5)"
+        ]
+      },
+      "muted-dark": {
+        "role": "neutral",
+        "displayName": "Muted (dark theme)",
+        "canonical": "oklch(72.4% 0.031 257.8)",
+        "tonalRamp": [
+          "oklch(15.0% 0.031 257.8)",
+          "oklch(26.4% 0.031 257.8)",
+          "oklch(37.9% 0.031 257.8)",
+          "oklch(49.3% 0.031 257.8)",
+          "oklch(60.7% 0.031 257.8)",
+          "oklch(72.1% 0.031 257.8)",
+          "oklch(83.6% 0.031 257.8)",
+          "oklch(95.0% 0.031 257.8)"
+        ]
+      },
+      "faint-dark": {
+        "role": "neutral",
+        "displayName": "Faint (dark theme)",
+        "canonical": "oklch(63.9% 0.032 257.8)",
+        "tonalRamp": [
+          "oklch(15.0% 0.032 257.8)",
+          "oklch(26.4% 0.032 257.8)",
+          "oklch(37.9% 0.032 257.8)",
+          "oklch(49.3% 0.032 257.8)",
+          "oklch(60.7% 0.032 257.8)",
+          "oklch(72.1% 0.032 257.8)",
+          "oklch(83.6% 0.032 257.8)",
+          "oklch(95.0% 0.032 257.8)"
+        ]
+      },
+      "success-dark": {
+        "role": "tertiary",
+        "displayName": "Verified Green (dark theme)",
+        "canonical": "oklch(77.5% 0.121 163.4)",
+        "tonalRamp": [
+          "oklch(15.0% 0.121 163.4)",
+          "oklch(26.4% 0.121 163.4)",
+          "oklch(37.9% 0.121 163.4)",
+          "oklch(49.3% 0.121 163.4)",
+          "oklch(60.7% 0.121 163.4)",
+          "oklch(72.1% 0.121 163.4)",
+          "oklch(83.6% 0.121 163.4)",
+          "oklch(95.0% 0.121 163.4)"
+        ]
+      },
+      "success-soft-dark": {
+        "role": "tertiary",
+        "displayName": "Verified Green Wash (dark theme)",
+        "canonical": "oklch(26.8% 0.038 169.8)",
+        "tonalRamp": [
+          "oklch(15.0% 0.038 169.8)",
+          "oklch(26.4% 0.038 169.8)",
+          "oklch(37.9% 0.038 169.8)",
+          "oklch(49.3% 0.038 169.8)",
+          "oklch(60.7% 0.038 169.8)",
+          "oklch(72.1% 0.038 169.8)",
+          "oklch(83.6% 0.038 169.8)",
+          "oklch(95.0% 0.038 169.8)"
+        ]
+      },
+      "warning-dark": {
+        "role": "tertiary",
+        "displayName": "Clarification Amber (dark theme)",
+        "canonical": "oklch(80.8% 0.132 72.9)",
+        "tonalRamp": [
+          "oklch(15.0% 0.132 72.9)",
+          "oklch(26.4% 0.132 72.9)",
+          "oklch(37.9% 0.132 72.9)",
+          "oklch(49.3% 0.132 72.9)",
+          "oklch(60.7% 0.132 72.9)",
+          "oklch(72.1% 0.132 72.9)",
+          "oklch(83.6% 0.132 72.9)",
+          "oklch(95.0% 0.132 72.9)"
+        ]
+      },
+      "warning-soft-dark": {
+        "role": "tertiary",
+        "displayName": "Clarification Amber Wash (dark theme)",
+        "canonical": "oklch(27.7% 0.042 75.1)",
+        "tonalRamp": [
+          "oklch(15.0% 0.042 75.1)",
+          "oklch(26.4% 0.042 75.1)",
+          "oklch(37.9% 0.042 75.1)",
+          "oklch(49.3% 0.042 75.1)",
+          "oklch(60.7% 0.042 75.1)",
+          "oklch(72.1% 0.042 75.1)",
+          "oklch(83.6% 0.042 75.1)",
+          "oklch(95.0% 0.042 75.1)"
+        ]
+      },
+      "danger-dark": {
+        "role": "tertiary",
+        "displayName": "Failure Red (dark theme)",
+        "canonical": "oklch(72.3% 0.156 21.7)",
+        "tonalRamp": [
+          "oklch(15.0% 0.156 21.7)",
+          "oklch(26.4% 0.156 21.7)",
+          "oklch(37.9% 0.156 21.7)",
+          "oklch(49.3% 0.156 21.7)",
+          "oklch(60.7% 0.156 21.7)",
+          "oklch(72.1% 0.156 21.7)",
+          "oklch(83.6% 0.156 21.7)",
+          "oklch(95.0% 0.156 21.7)"
+        ]
+      },
+      "danger-soft-dark": {
+        "role": "tertiary",
+        "displayName": "Failure Red Wash (dark theme)",
+        "canonical": "oklch(25.4% 0.059 15.6)",
+        "tonalRamp": [
+          "oklch(15.0% 0.059 15.6)",
+          "oklch(26.4% 0.059 15.6)",
+          "oklch(37.9% 0.059 15.6)",
+          "oklch(49.3% 0.059 15.6)",
+          "oklch(60.7% 0.059 15.6)",
+          "oklch(72.1% 0.059 15.6)",
+          "oklch(83.6% 0.059 15.6)",
+          "oklch(95.0% 0.059 15.6)"
+        ]
+      },
+      "sheet-dark": {
+        "role": "neutral",
+        "displayName": "Sheet (dark theme)",
+        "canonical": "oklch(21.7% 0.028 262.4)",
+        "tonalRamp": [
+          "oklch(15.0% 0.028 262.4)",
+          "oklch(26.4% 0.028 262.4)",
+          "oklch(37.9% 0.028 262.4)",
+          "oklch(49.3% 0.028 262.4)",
+          "oklch(60.7% 0.028 262.4)",
+          "oklch(72.1% 0.028 262.4)",
+          "oklch(83.6% 0.028 262.4)",
+          "oklch(95.0% 0.028 262.4)"
+        ]
+      },
+      "sheet-ink-dark": {
+        "role": "neutral",
+        "displayName": "Sheet Ink (dark theme)",
+        "canonical": "oklch(92.9% 0.013 255.5)",
+        "tonalRamp": [
+          "oklch(15.0% 0.013 255.5)",
+          "oklch(26.4% 0.013 255.5)",
+          "oklch(37.9% 0.013 255.5)",
+          "oklch(49.3% 0.013 255.5)",
+          "oklch(60.7% 0.013 255.5)",
+          "oklch(72.1% 0.013 255.5)",
+          "oklch(83.6% 0.013 255.5)",
+          "oklch(95.0% 0.013 255.5)"
+        ]
+      },
+      "sheet-line-dark": {
+        "role": "neutral",
+        "displayName": "Sheet Line (dark theme)",
+        "canonical": "oklch(32.3% 0.038 259.4)",
+        "tonalRamp": [
+          "oklch(15.0% 0.038 259.4)",
+          "oklch(26.4% 0.038 259.4)",
+          "oklch(37.9% 0.038 259.4)",
+          "oklch(49.3% 0.038 259.4)",
+          "oklch(60.7% 0.038 259.4)",
+          "oklch(72.1% 0.038 259.4)",
+          "oklch(83.6% 0.038 259.4)",
+          "oklch(95.0% 0.038 259.4)"
+        ]
+      },
+      "sheet-tint-dark": {
+        "role": "neutral",
+        "displayName": "Sheet Tint (dark theme)",
+        "canonical": "oklch(26.0% 0.035 262.7)",
+        "tonalRamp": [
+          "oklch(15.0% 0.035 262.7)",
+          "oklch(26.4% 0.035 262.7)",
+          "oklch(37.9% 0.035 262.7)",
+          "oklch(49.3% 0.035 262.7)",
+          "oklch(60.7% 0.035 262.7)",
+          "oklch(72.1% 0.035 262.7)",
+          "oklch(83.6% 0.035 262.7)",
+          "oklch(95.0% 0.035 262.7)"
+        ]
+      },
+      "lightbox-dark": {
+        "role": "neutral",
+        "displayName": "Light Box (dark theme)",
+        "canonical": "oklch(13.3% 0.013 255.5)",
+        "tonalRamp": [
+          "oklch(15.0% 0.013 255.5)",
+          "oklch(26.4% 0.013 255.5)",
+          "oklch(37.9% 0.013 255.5)",
+          "oklch(49.3% 0.013 255.5)",
+          "oklch(60.7% 0.013 255.5)",
+          "oklch(72.1% 0.013 255.5)",
+          "oklch(83.6% 0.013 255.5)",
+          "oklch(95.0% 0.013 255.5)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "First-run headline only (22px on phones, 28px from sm)."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Patient name in the case header; dialog and panel titles."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Banner titles, case-row names, panel section labels."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default chrome text (the body is 14px)."
+      },
+      "body-small": {
+        "displayName": "Body small",
+        "purpose": "Secondary text: banner bodies, list metadata, descriptions."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Button, menu item and segmented labels."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Chips, keyboard hints, tooltips, engine status."
+      },
+      "document-letterhead": {
+        "displayName": "Document letterhead",
+        "purpose": "Department line on the sheet; uppercase, 13px when the sheet is narrow."
+      },
+      "document-section": {
+        "displayName": "Document section",
+        "purpose": "Uppercase sheet section headers (Technique, Findings, Impression) and organ chips (0.05em)."
+      },
+      "document-body": {
+        "displayName": "Document body",
+        "purpose": "Every editable value on the sheet; the print template's own stack."
+      },
+      "document-mono": {
+        "displayName": "Document mono",
+        "purpose": "Token / radiology ID and document reference."
+      }
+    },
+    "shadows": [
+      {
+        "name": "xs",
+        "value": "0 1px 2px rgb(15 23 42 / 0.05)",
+        "purpose": "Hairline lift: secondary buttons, active segment, section pill, Notes for the AI panel. Dark theme uses black at 0.35."
+      },
+      {
+        "name": "sm",
+        "value": "0 1px 2px rgb(15 23 42 / 0.05), 0 1px 3px rgb(15 23 42 / 0.07)",
+        "purpose": "Primary buttons. Dark theme uses black at 0.35 / 0.40."
+      },
+      {
+        "name": "md",
+        "value": "0 2px 4px -2px rgb(15 23 42 / 0.05), 0 6px 14px -4px rgb(15 23 42 / 0.07)",
+        "purpose": "Tooltips."
+      },
+      {
+        "name": "lg",
+        "value": "0 4px 8px -4px rgb(15 23 42 / 0.05), 0 16px 36px -10px rgb(15 23 42 / 0.16)",
+        "purpose": "Floating overlays: dialogs, menus, side panels, drawer, toasts. Dark theme uses black at 0.35 / 0.55."
+      },
+      {
+        "name": "sheet",
+        "value": "0 1px 1px rgb(15 23 42 / 0.05), 0 10px 30px -12px rgb(15 23 42 / 0.16)",
+        "purpose": "The report sheet, the one lifted object at rest; always paired with a 1px sheet-line ring at 70%."
+      },
+      {
+        "name": "lightbox-paper",
+        "value": "0 24px 60px -20px rgb(0 0 0 / 0.8)",
+        "purpose": "The note photo floating in the always-dark light box."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Confident arrival: reveals, list rows, sidebar width, dialogs in."
+      },
+      {
+        "name": "ease-standard",
+        "value": "cubic-bezier(0.2, 0, 0, 1)",
+        "purpose": "Default state transitions and the theme crossfade."
+      },
+      {
+        "name": "duration-fast",
+        "value": "120ms",
+        "purpose": "Hover, press and colour changes on controls."
+      },
+      {
+        "name": "duration-base",
+        "value": "180ms",
+        "purpose": "Chip colour, drop-zone and marker changes."
+      },
+      {
+        "name": "duration-slow",
+        "value": "260ms",
+        "purpose": "Theme crossfade (view transition), note rotation."
+      },
+      {
+        "name": "spring-pill",
+        "value": "spring, bounce 0, 300ms",
+        "purpose": "Sliding selection pill in segmented controls and the section nav."
+      },
+      {
+        "name": "overlay",
+        "value": "200ms in / 150ms out (fade + 0.97 scale)",
+        "purpose": "Dialogs, menus, tooltips."
+      },
+      {
+        "name": "panel",
+        "value": "300ms in / 200ms out (slide)",
+        "purpose": "Side panels and the queue drawer."
+      },
+      {
+        "name": "scan-beam",
+        "value": "scan-beam 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite",
+        "purpose": "Signature: cobalt beam sweeping the note while the AI reads it. Hidden under reduced motion."
+      },
+      {
+        "name": "develop",
+        "value": "develop 560ms cubic-bezier(0.16, 1, 0.3, 1) both, 90ms stagger",
+        "purpose": "Signature: each sheet section develops from blur(6px) and a 4px rise when a fresh draft lands."
+      },
+      {
+        "name": "rule-draw",
+        "value": "rule-draw 640ms cubic-bezier(0.16, 1, 0.3, 1) both",
+        "purpose": "Signature: section rules and the letterhead stripe draw left to right (cobalt cell +320ms)."
+      },
+      {
+        "name": "soft-pulse",
+        "value": "soft-pulse 1.6s ease-in-out infinite",
+        "purpose": "Queued status dot."
+      },
+      {
+        "name": "indeterminate",
+        "value": "indeterminate 1.5s cubic-bezier(0.45, 0, 0.55, 1) infinite",
+        "purpose": "Progress bar under a generating case row."
+      },
+      {
+        "name": "shimmer",
+        "value": "shimmer 1.8s linear infinite",
+        "purpose": "Skeleton bars while a case loads or the AI drafts."
+      },
+      {
+        "name": "check-pop",
+        "value": "check-pop 420ms cubic-bezier(0.16, 1, 0.3, 1) both",
+        "purpose": "Saved tick; the only overshoot in the system."
+      },
+      {
+        "name": "float",
+        "value": "float 1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite",
+        "purpose": "Upload icon on the full-window drop target (smooth 4px float, never a bounce)."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      },
+      {
+        "name": "2xl",
+        "value": "1536px"
+      },
+      {
+        "name": "wide (sheet container)",
+        "value": "@container sheet (min-width: 32rem)"
+      },
+      {
+        "name": "coarse pointer",
+        "value": "(pointer: coarse)"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Navy primary; in the case header it is always Approve & download, top-right.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 15V3\"/><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><path d=\"m7 10 5 5 5-5\"/></svg>Approve &amp; download</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border: 0; border-radius: 8px; background: rgb(var(--brand, 15 44 89)); color: rgb(var(--on-accent, 255 255 255)); font: 500 14px/20px \"Inter Variable\", Inter, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif; box-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 1px 3px rgb(15 23 42 / 0.07); cursor: pointer; transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), transform 120ms cubic-bezier(0.2, 0, 0, 1); } .ds-btn-primary:hover { background: rgb(var(--brand, 15 44 89) / 0.9); } .ds-btn-primary:active { background: rgb(var(--brand, 15 44 89) / 0.85); transform: scale(0.97); } .ds-btn-primary:focus-visible { outline: 2px solid rgb(var(--accent, 37 99 235)); outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.5; pointer-events: none; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "The default button: surface fill, strong hairline border, hairline shadow.",
+      "html": "<button class=\"ds-btn-secondary\" type=\"button\">Answer in notes</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border: 1px solid rgb(var(--line-strong, 203 213 225) / 0.8); border-radius: 8px; background: rgb(var(--surface, 255 255 255)); color: rgb(var(--ink-2, 51 65 85)); font: 500 14px/20px \"Inter Variable\", Inter, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif; box-shadow: 0 1px 2px rgb(15 23 42 / 0.05); cursor: pointer; transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), border-color 120ms cubic-bezier(0.2, 0, 0, 1), color 120ms cubic-bezier(0.2, 0, 0, 1), transform 120ms cubic-bezier(0.2, 0, 0, 1); } .ds-btn-secondary:hover { border-color: rgb(var(--line-strong, 203 213 225)); background: rgb(var(--surface-2, 246 248 251)); color: rgb(var(--ink, 15 23 42)); } .ds-btn-secondary:active { transform: scale(0.97); } .ds-btn-secondary:focus-visible { outline: 2px solid rgb(var(--accent, 37 99 235)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Icon Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Icon-only header action; always carries an accessible name and a tooltip.",
+      "html": "<button class=\"ds-btn-ghost\" type=\"button\" aria-label=\"More actions\" title=\"More actions\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/><circle cx=\"5\" cy=\"12\" r=\"1\"/></svg></button>",
+      "css": ".ds-btn-ghost { display: inline-grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: rgb(var(--ink-2, 51 65 85)); cursor: pointer; transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), color 120ms cubic-bezier(0.2, 0, 0, 1), transform 120ms cubic-bezier(0.2, 0, 0, 1); } .ds-btn-ghost svg { width: 18px; height: 18px; } .ds-btn-ghost:hover { background: rgb(var(--surface-3, 237 241 246)); color: rgb(var(--ink, 15 23 42)); } .ds-btn-ghost:active { transform: scale(0.97); } .ds-btn-ghost:focus-visible { outline: 2px solid rgb(var(--accent, 37 99 235)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Status Chips",
+      "kind": "chip",
+      "refersTo": "status-chip-queued",
+      "description": "One colour per case state: Queued, Draft, Blocked, Failed, Finalized.",
+      "html": "<div class=\"ds-chips\"><span class=\"ds-chip ds-chip-queued\"><span class=\"ds-chip-dot\"></span>Queued</span><span class=\"ds-chip ds-chip-draft\">Draft</span><span class=\"ds-chip ds-chip-blocked\">Blocked</span><span class=\"ds-chip ds-chip-failed\">Failed</span><span class=\"ds-chip ds-chip-finalized\">Finalized</span></div>",
+      "css": ".ds-chips { display: flex; flex-wrap: wrap; gap: 8px; } .ds-chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 9999px; font: 500 12px/16px \"Inter Variable\", Inter, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif; white-space: nowrap; } .ds-chip-queued { background: rgb(var(--accent-soft, 234 241 254)); color: rgb(var(--accent, 37 99 235)); } .ds-chip-draft { background: rgb(var(--surface-3, 237 241 246)); color: rgb(var(--ink-2, 51 65 85)); } .ds-chip-blocked { background: rgb(var(--warning-soft, 253 243 228)); color: rgb(var(--warning, 180 83 9)); } .ds-chip-failed { background: rgb(var(--danger-soft, 253 238 238)); color: rgb(var(--danger, 200 30 30)); } .ds-chip-finalized { background: rgb(var(--success-soft, 230 245 238)); color: rgb(var(--success, 4 120 87)); } .ds-chip-dot { width: 6px; height: 6px; margin: 0 2px; border-radius: 9999px; background: currentColor; animation: ds-pulse 1.6s ease-in-out infinite; } @keyframes ds-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.75); } } @media (prefers-reduced-motion: reduce) { .ds-chip-dot { animation: none; } }"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "Queue search: surface-2 fill, cobalt border and 20% ring on focus, \"/\" hint.",
+      "html": "<label class=\"ds-search\"><svg class=\"ds-search-icon\" viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/></svg><input type=\"search\" placeholder=\"Search name, token, study\" aria-label=\"Search cases\" /><kbd class=\"ds-kbd\">/</kbd></label>",
+      "css": ".ds-search { position: relative; display: block; width: 280px; } .ds-search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: rgb(var(--muted, 84 98 119)); pointer-events: none; } .ds-search input { width: 100%; height: 36px; padding: 0 36px 0 32px; border: 1px solid rgb(var(--line, 225 231 239)); border-radius: 8px; background: rgb(var(--surface-2, 246 248 251)); color: rgb(var(--ink, 15 23 42)); font: 400 14px/20px \"Inter Variable\", Inter, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif; transition: border-color 120ms cubic-bezier(0.2, 0, 0, 1), box-shadow 120ms cubic-bezier(0.2, 0, 0, 1), background-color 120ms cubic-bezier(0.2, 0, 0, 1); } .ds-search input::placeholder { color: rgb(var(--muted, 84 98 119)); } .ds-search input:hover { border-color: rgb(var(--line-strong, 203 213 225)); } .ds-search input:focus, .ds-search input:focus-visible { outline: none; border-color: rgb(var(--accent, 37 99 235)); background: rgb(var(--surface, 255 255 255)); box-shadow: 0 0 0 2px rgb(var(--accent, 37 99 235) / 0.2); } .ds-kbd { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 4px; border: 1px solid rgb(var(--line-strong, 203 213 225) / 0.7); border-radius: 8px; background: rgb(var(--surface-2, 246 248 251)); color: rgb(var(--muted, 84 98 119)); font: 500 12px/16px \"Inter Variable\", Inter, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif; pointer-events: none; }"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "nav",
+      "refersTo": "segmented",
+      "description": "Exclusive switch on a surface-3 track; the active pill slides with no bounce.",
+      "html": "<div class=\"ds-seg\" role=\"group\" aria-label=\"Case list\"><button type=\"button\" class=\"ds-seg-btn\" aria-pressed=\"true\">Active <span class=\"ds-seg-count\">12</span></button><button type=\"button\" class=\"ds-seg-btn\" aria-pressed=\"false\">Archived <span class=\"ds-seg-count\">3</span></button></div>",
+      "css": ".ds-seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 12px; background: rgb(var(--surface-3, 237 241 246)); width: 280px; } .ds-seg-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: rgb(var(--muted, 84 98 119)); font: 500 13px/18px \"Inter Variable\", Inter, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif; cursor: pointer; transition: color 120ms cubic-bezier(0.2, 0, 0, 1), background-color 300ms cubic-bezier(0.2, 0, 0, 1), box-shadow 300ms cubic-bezier(0.2, 0, 0, 1); } .ds-seg-btn:hover { color: rgb(var(--ink, 15 23 42)); } .ds-seg-btn[aria-pressed=\"true\"] { background: rgb(var(--surface, 255 255 255)); color: rgb(var(--ink, 15 23 42)); box-shadow: 0 1px 2px rgb(15 23 42 / 0.05); } .ds-seg-count { font-variant-numeric: tabular-nums; color: rgb(var(--faint, 103 116 135)); } .ds-seg-btn[aria-pressed=\"true\"] .ds-seg-count { color: rgb(var(--muted, 84 98 119)); } .ds-seg-btn:focus-visible { outline: 2px solid rgb(var(--accent, 37 99 235)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Case Row",
+      "kind": "nav",
+      "refersTo": "case-row-selected",
+      "description": "Queue rows: selection is a full cobalt wash with navy name, never a side stripe.",
+      "html": "<ul class=\"ds-cases\"><li><button type=\"button\" class=\"ds-case\" aria-current=\"true\"><span class=\"ds-case-top\"><span class=\"ds-case-name\">Patient name</span><span class=\"ds-chip ds-chip-draft\">Draft</span></span><span class=\"ds-case-meta\"><b>#0000</b><span class=\"ds-case-study\">Modality and protocol</span><span>2 Oct</span></span></button></li><li><button type=\"button\" class=\"ds-case\"><span class=\"ds-case-top\"><span class=\"ds-case-name\">Patient name</span><span class=\"ds-chip ds-chip-queued\"><span class=\"ds-chip-dot\"></span>Queued</span></span><span class=\"ds-case-meta\"><span class=\"ds-case-study\">Awaiting transcription</span><span>2 Oct</span></span></button></li></ul>",
+      "css": ".ds-cases { list-style: none; margin: 0; padding: 0; width: 288px; } .ds-case { display: flex; flex-direction: column; gap: 4px; width: 100%; margin-bottom: 2px; padding: 10px 12px; border: 0; border-radius: 12px; background: transparent; text-align: left; cursor: pointer; transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1); } .ds-case:hover { background: rgb(var(--surface-3, 237 241 246)); } .ds-case[aria-current=\"true\"] { background: rgb(var(--accent-soft, 234 241 254)); } .ds-case:focus-visible { outline: 2px solid rgb(var(--accent, 37 99 235)); outline-offset: 2px; } .ds-case-top, .ds-case-meta { display: flex; align-items: center; gap: 8px; width: 100%; } .ds-case-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 14px/20px \"Inter Variable\", Inter, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif; color: rgb(var(--ink, 15 23 42)); } .ds-case[aria-current=\"true\"] .ds-case-name { color: rgb(var(--brand-ink, 15 44 89)); } .ds-case-meta { font: 400 13px/18px \"Inter Variable\", Inter, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif; color: rgb(var(--muted, 84 98 119)); font-variant-numeric: tabular-nums; } .ds-case-meta b { font-weight: 600; color: rgb(var(--ink-2, 51 65 85)); } .ds-case-study { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 9999px; font: 500 12px/16px \"Inter Variable\", Inter, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif; white-space: nowrap; } .ds-chip-queued { background: rgb(var(--accent-soft, 234 241 254)); color: rgb(var(--accent, 37 99 235)); } .ds-chip-draft { background: rgb(var(--surface-3, 237 241 246)); color: rgb(var(--ink-2, 51 65 85)); } .ds-chip-blocked { background: rgb(var(--warning-soft, 253 243 228)); color: rgb(var(--warning, 180 83 9)); } .ds-chip-failed { background: rgb(var(--danger-soft, 253 238 238)); color: rgb(var(--danger, 200 30 30)); } .ds-chip-finalized { background: rgb(var(--success-soft, 230 245 238)); color: rgb(var(--success, 4 120 87)); } .ds-chip-dot { width: 6px; height: 6px; margin: 0 2px; border-radius: 9999px; background: currentColor; animation: ds-pulse 1.6s ease-in-out infinite; } @keyframes ds-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.75); } } @media (prefers-reduced-motion: reduce) { .ds-chip-dot { animation: none; } }"
+    },
+    {
+      "name": "State Banner",
+      "kind": "card",
+      "refersTo": "banner-info",
+      "description": "What the case needs next: a full-border state tint above the sheet.",
+      "html": "<div class=\"ds-banner\" role=\"status\"><span class=\"ds-banner-icon\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M21 12a9 9 0 1 1-6.219-8.56\"/></svg></span><div class=\"ds-banner-text\"><p class=\"ds-banner-title\">Queued for the AI</p><p class=\"ds-banner-body\">The report fills in here when it is ready.</p></div></div>",
+      "css": ".ds-banner { display: flex; align-items: flex-start; gap: 12px; max-width: 520px; padding: 12px 16px; border: 1px solid rgb(var(--accent, 37 99 235) / 0.2); border-radius: 12px; background: rgb(var(--accent-soft, 234 241 254)); color: rgb(var(--ink-2, 51 65 85)); } .ds-banner-icon { margin-top: 2px; color: rgb(var(--accent, 37 99 235)); } .ds-banner-icon svg { width: 18px; height: 18px; animation: ds-spin 1s linear infinite; } @keyframes ds-spin { to { transform: rotate(360deg); } } @media (prefers-reduced-motion: reduce) { .ds-banner-icon svg { animation: none; } } .ds-banner-title { margin: 0; font: 600 14px/20px \"Inter Variable\", Inter, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif; color: rgb(var(--ink, 15 23 42)); } .ds-banner-body { margin: 2px 0 0; font: 400 13px/1.625 \"Inter Variable\", Inter, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif; }"
+    },
+    {
+      "name": "Sheet Section",
+      "kind": "custom",
+      "refersTo": "report-sheet",
+      "description": "The document twin: printed stripe, uppercase section header on a cobalt rule, organ chip, marker-led finding rows that read as print until hovered.",
+      "html": "<article class=\"ds-sheet\"><div class=\"ds-stripe\"><span></span><span></span></div><h2 class=\"ds-sec\"><span>Findings</span><small>RadLex Organ Grouping</small></h2><div class=\"ds-organ\">Region</div><ul class=\"ds-findings\"><li><i></i><b class=\"ds-field\" tabindex=\"0\">Structure</b><span class=\"ds-field\" tabindex=\"0\">Normal statement, as it prints.</span></li><li class=\"is-abnormal\"><i></i><b class=\"ds-field\" tabindex=\"0\">Structure</b><span class=\"ds-field\" tabindex=\"0\">Abnormal finding, as it prints.</span></li></ul></article>",
+      "css": ".ds-sheet { max-width: 560px; padding: 20px 28px 24px; border-radius: 6px; background: rgb(var(--sheet, 255 255 255)); color: rgb(var(--sheet-ink, 15 23 42)); font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif; box-shadow: 0 1px 1px rgb(15 23 42 / 0.05), 0 10px 30px -12px rgb(15 23 42 / 0.16), 0 0 0 1px rgb(var(--sheet-line, 226 232 240) / 0.7); } .ds-stripe { display: flex; height: 3px; border-radius: 9999px; overflow: hidden; } .ds-stripe span:first-child { width: 70%; background: rgb(var(--brand, 15 44 89)); } .ds-stripe span:last-child { flex: 1; background: rgb(var(--accent, 37 99 235)); } .ds-sec { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 24px 0 12px; padding-bottom: 4px; border-bottom: 1.5px solid rgb(var(--accent, 37 99 235)); font: 800 13px/18px -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: rgb(var(--brand-ink, 15 44 89)); } .ds-sec small { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; color: rgb(var(--faint, 103 116 135)); } .ds-organ { display: inline-block; padding: 2px 8px; border-radius: 3px; background: rgb(var(--sheet-tint, 241 245 249)); font: 800 13px/18px -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif; letter-spacing: 0.05em; text-transform: uppercase; color: rgb(var(--brand-ink, 15 44 89)); } .ds-findings { list-style: none; margin: 6px 0 0; padding: 0; } .ds-findings li { display: grid; grid-template-columns: 1.5rem 9rem minmax(0, 1fr); align-items: start; column-gap: 4px; padding: 2px 0; border-radius: 8px; } .ds-findings li.is-abnormal { background: rgb(var(--warning-soft, 253 243 228) / 0.5); } .ds-findings i { justify-self: center; width: 8px; height: 8px; margin-top: 11px; border-radius: 9999px; background: rgb(var(--accent, 37 99 235)); } .ds-findings li.is-abnormal i { background: rgb(var(--warning, 180 83 9)); transform: scale(1.25); box-shadow: 0 0 0 3px rgb(var(--warning, 180 83 9) / 0.18); } .ds-field { padding: 4px; border-radius: 3px; font-size: 15px; line-height: 1.625; outline: none; transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), box-shadow 120ms cubic-bezier(0.2, 0, 0, 1); } b.ds-field { font-weight: 600; } .ds-findings li.is-abnormal span.ds-field { font-weight: 500; } .ds-field:hover { background: rgb(var(--accent-soft, 234 241 254) / 0.55); } .ds-field:focus, .ds-field:focus-visible { background: rgb(var(--sheet, 255 255 255)); box-shadow: 0 0 0 2px rgb(var(--accent, 37 99 235) / 0.5); }"
+    },
+    {
+      "name": "Impression Card",
+      "kind": "custom",
+      "refersTo": "impression-card",
+      "description": "The PDF's impression card reproduced in the twin; its 4px navy left rule is one of only two side rules in the system, both inside the sheet.",
+      "html": "<section class=\"ds-impression\"><h2>Impression</h2><ol><li>Key diagnosis or finding, as it prints.</li><li>Second impression point.</li></ol><div class=\"ds-rec\"><h3>Recommendations</h3><p>Clinical correlation is advised.</p></div></section>",
+      "css": ".ds-impression { max-width: 520px; padding: 14px 20px; border: 1px solid rgb(var(--sheet-line, 226 232 240)); border-left: 4px solid rgb(var(--brand, 15 44 89)); border-radius: 4px; background: rgb(var(--sheet-tint, 241 245 249) / 0.45); color: rgb(var(--sheet-ink, 15 23 42)); font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif; } .ds-impression h2 { margin: 0; font: 800 13px/18px -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: rgb(var(--brand-ink, 15 44 89)); } .ds-impression ol { margin: 6px 0 0; padding-left: 22px; font: 600 15px/1.375 -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif; } .ds-impression ol li { padding: 4px 0; } .ds-impression ol li::marker { color: rgb(var(--brand-ink, 15 44 89)); font-variant-numeric: tabular-nums; } .ds-rec { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgb(var(--sheet-line, 226 232 240)); } .ds-rec h3 { margin: 0; font: 800 12px/16px -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: rgb(var(--accent, 37 99 235)); } .ds-rec p { margin: 6px 0 0; font: 400 15px/1.375 -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Live Twin",
+    "overview": "The workspace is the live twin of the issued A4 report: what the resident edits is visibly what prints. The report sheet in the right pane carries the locked print template's own letterhead, crests, two-cell navy/cobalt stripe, uppercase section headers on a cobalt rule, organ-region chips, critical box and impression card, set in the template's own system font stack, and every value on it is editable in place. Everything around the sheet is quiet chrome on cool slate, set in Inter Variable, whose only job is to move the resident from a photographed note to an issued PDF. The system refuses the generic SaaS form-and-card editor: there is no field-by-field form, no dashboard of cards, no second rendering of the report.\n\nThe second material is the reading-room light box. The senior's handwritten note sits in the centre pane on a near-black backlit field that stays dark in both themes, with white-alpha controls on top. When the AI reads the note, a cobalt scan beam sweeps the paper; when the draft lands, the sheet develops section by section out of a soft blur while the stripe and section rules draw themselves left to right. That is the one signature moment. Everything else moves briefly and only to explain a change of state.\n\nDensity is workstation density: a 14px base on a fixed eight-step scale, 36px controls, 56px bars, 1px hairlines. The layout is fixed in shape: case queue left, note light box centre, report sheet right, Approve & download always top-right.",
+    "keyCharacteristics": [
+      "The report sheet is the PDF's live twin: same institutional language, same hierarchy, editable in place.",
+      "Two voices: Inter Variable for chrome, the print template's system stack for anything that prints.",
+      "Navy carries authority and the final action; cobalt carries live work, focus and the printed rules.",
+      "A dark light box for the source note in both themes.",
+      "Flat chrome separated by hairlines; the paper is the one lifted object.",
+      "One colour per case state, everywhere the state appears.",
+      "Light and dark themes from one set of RGB-triplet tokens, with alpha modifiers."
+    ],
+    "rules": [
+      {
+        "name": "The Printed Pair Rule",
+        "body": "Navy and cobalt keep the jobs they have on the PDF. Navy is authority: the department, the headings, the one action that issues the report. Cobalt is the working line: rules, bullets, focus, the AI's live state. Do not swap them, and do not add a third brand hue.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Colour Per State Rule",
+        "body": "Queued and Generating are cobalt, Draft is neutral, Blocked is amber, Failed is red, Finalized is green, Archived is neutral and muted. The same mapping is used in the chip, the banner and the toast for that state.",
+        "section": "colors"
+      },
+      {
+        "name": "The Red Is For Failure Rule",
+        "body": "Red marks a failure (generation, save, load) and the urgent clinical notification. It is never decoration, emphasis or a hover colour.",
+        "section": "colors"
+      },
+      {
+        "name": "The Light Box Stays Dark Rule",
+        "body": "The note viewer is near-black in both themes, its controls are white at 6 to 15% alpha with slate text, and the paper inside it keeps its own colour. Never theme the light box.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Voices Rule",
+        "body": "Anything that prints is set in the document stack (`font-document`): the sheet, the verbatim transcript, audit-sheet bodies. Anything that only exists on screen is set in Inter, including the affordances that live inside the sheet: Add region, Add impression point, helper text, the unprinted MR number.",
+        "section": "typography"
+      },
+      {
+        "name": "The Printed Caps Rule",
+        "body": "Uppercase with positive tracking belongs only to text the PDF itself sets in caps: letterhead, section headers, organ chips, meta labels, sign-off heads, the critical-box heading. Chrome labels are sentence case and never tracked out.",
+        "section": "typography"
+      },
+      {
+        "name": "The Fixed Scale Rule",
+        "body": "Use the eight steps and nothing else. Nothing renders below 12px, and there is no clamp() or viewport-scaled type.",
+        "section": "typography"
+      },
+      {
+        "name": "The One Paper Rule",
+        "body": "Only the report sheet (and the note paper in the light box) is lifted at rest. Chrome panels, banners and list rows sit flat; a new surface gets a shadow only if it floats over the workspace.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Twin-Only Side Rule",
+        "body": "Exactly two elements carry a 4px left rule, and both live inside the document twin because they reproduce the PDF's own devices: the impression card (navy rule, from the print template's impression card) and the critical box (red rule, from its critical alert). App chrome never uses a side stripe: the selected case row is a full cobalt wash, state banners are full-border tints, and separators are full hairlines. A new sheet element may use a side rule only if the print template draws one there; a new chrome element never does.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do treat the print template (`src/pages/print/[id].astro`) as the source of the sheet's look, and read institution text from `src/lib/institution.ts` so the twin and the PDF cannot drift.",
+      "Do set printed text in `font-document` and on-screen text in Inter, per the Two Voices Rule.",
+      "Do keep Approve & download as the single navy primary, top-right of the case header (bottom bar on phones), disabled with a reason until the case can be issued.",
+      "Do mark selection with a full cobalt wash and state with full-border tints.",
+      "Do express every state through the One Colour Per State mapping, in chip, banner and toast alike.",
+      "Do use the semantic tokens (`bg-surface`, `text-muted`, `border-line`, `bg-accent-soft`) with alpha modifiers rather than raw palette colours, so both themes stay correct.",
+      "Do gate every loop and reveal behind reduced-motion, and give touch pointers 44px targets with hover-only controls always visible.",
+      "Do leave unknown header values empty so they show \"Not stated\" on screen and print as \"Not stated in source\"."
+    ],
+    "donts": [
+      "Don't build a generic SaaS form-and-card editor: no field-by-field form beside a preview, no card grid of report sections, no second rendering of the report.",
+      "Don't put a coloured side stripe on any chrome element (list rows, banners, toasts, panels); the 4px left rule belongs only to the impression card and critical box inside the twin.",
+      "Don't use red for anything but failure and the urgent clinical notification.",
+      "Don't theme the light box or let its white-alpha controls appear outside it.",
+      "Don't use uppercase tracked labels in chrome; caps belong to text the PDF prints in caps.",
+      "Don't add type sizes outside the eight-step scale or render anything below 12px.",
+      "Don't add shadows to flat chrome; only the paper and floating overlays are lifted.",
+      "Don't use bounce easing or bouncing loops; selection pills use a spring with no bounce, and the drop target floats smoothly rather than bouncing."
+    ]
+  }
+}

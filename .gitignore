@@ -11,6 +11,23 @@ dist/
 # Temporary logs
 *.log
 
+# AI worker scratch, rulebook output folder, UI screenshot checks
+.worker/
+output/
+.ui-check/
+
+# Local database backups (patient data)
+data/*.bak*
+
 # OS files
 .DS_Store
 Thumbs.db
+
+# Patient data: never commit (the repo is public)
+data/
+uploads/
+input/
+*.pdf
+screenshot_*.png
+server*.log
+worker*.log

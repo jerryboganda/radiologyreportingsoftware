@@ -1,8 +1,0 @@
-HTTP/1.1 500 Internal Server Error
-content-type: application/json
-Date: Wed, 30 Sep 2026 16:49:04 GMT
-Connection: keep-alive
-Keep-Alive: timeout=5
-Transfer-Encoding: chunked
-
-{"error":"Failed to generate PDF: net::ERR_CONNECTION_REFUSED at http://localhost/print/2014545a-df17-43a2-b17b-c4be60ec47ef"}

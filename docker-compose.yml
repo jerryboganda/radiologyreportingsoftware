@@ -1,0 +1,16 @@
+services:
+  radiology:
+    build: .
+    image: radiology-reporter:local
+    container_name: radiology-reporter
+    ports:
+      - "4321:4321"
+    environment:
+      # Reporting dates are local calendar dates (Pakistan), not UTC.
+      TZ: Asia/Karachi
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      # sync-input.ts reads <cwd>/input
+      - ./input:/app/input
+    restart: unless-stopped

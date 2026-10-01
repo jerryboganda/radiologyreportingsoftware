@@ -1,188 +1,99 @@
 import type { APIRoute } from 'astro';
-import fs from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
+import { and, eq, inArray, lt, or } from 'drizzle-orm';
 import { db } from '../../db';
-import { reports } from '../../db/schema';
-import { eq } from 'drizzle-orm';
+import { reports, type NewReport } from '../../db/schema';
+import { QUEUEABLE_STATUSES, isBlankDraft, validateWorkerResult, workerResultToColumns, type ReportStatus, type WorkerResult } from '../../lib/report';
+import { guardedUpdate } from '../../lib/ingest';
 
-const QUEUE_FILE = path.resolve(process.cwd(), 'data', 'ai_queue.json');
-const MAX_HISTORY = 50;
+// The reports table is the queue. Worker liveness lives in memory only (it drives the UI's online pill).
+let workerLastSeen: number | null = null;
+let workerBusy = false;
 
-interface QueueJob {
-  id: string;
-  reportId: string;
-  tokenNumber: string;
-  patientName: string;
-  imagePath: string;
-  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
-  createdAt: string;
-  startedAt?: string | null;
-  completedAt?: string | null;
-  error?: string | null;
-}
+/** A PROCESSING case untouched this long is reclaimed; the worker's own agy timeout is 5 min. */
+const STALE_MS = 15 * 60 * 1000;
+const REQUEUE: Partial<NewReport> = { status: 'QUEUED', auditStatus: 'PENDING', lastError: null };
 
-interface QueueData {
-  version: string;
-  updatedAt: string;
-  jobs: QueueJob[];
-}
+export const GET: APIRoute = () => Response.json({ workerLastSeen, workerBusy });
 
-function readQueue(): QueueData {
-  try {
-    if (!fs.existsSync(QUEUE_FILE)) {
-      const initial: QueueData = { version: '1.0', updatedAt: new Date().toISOString(), jobs: [] };
-      fs.writeFileSync(QUEUE_FILE, JSON.stringify(initial, null, 2), 'utf-8');
-      return initial;
-    }
-    const content = fs.readFileSync(QUEUE_FILE, 'utf-8');
-    return JSON.parse(content) as QueueData;
-  } catch (err) {
-    console.error('Error reading queue file:', err);
-    return { version: '1.0', updatedAt: new Date().toISOString(), jobs: [] };
-  }
-}
-
-function writeQueue(data: QueueData) {
-  try {
-    // Retain up to MAX_HISTORY completed/failed jobs
-    const activeJobs = data.jobs.filter(j => j.status === 'PENDING' || j.status === 'PROCESSING');
-    const pastJobs = data.jobs
-      .filter(j => j.status === 'COMPLETED' || j.status === 'FAILED')
-      .slice(-MAX_HISTORY);
-
-    data.jobs = [...activeJobs, ...pastJobs];
-    data.updatedAt = new Date().toISOString();
-    fs.writeFileSync(QUEUE_FILE, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Error writing queue file:', err);
-  }
-}
-
-// GET /api/queue - Get queue status & active jobs
-export const GET: APIRoute = async () => {
-  try {
-    const queueData = readQueue();
-    const pendingCount = queueData.jobs.filter(j => j.status === 'PENDING').length;
-    const processingCount = queueData.jobs.filter(j => j.status === 'PROCESSING').length;
-    const completedCount = queueData.jobs.filter(j => j.status === 'COMPLETED').length;
-
-    return new Response(JSON.stringify({
-      success: true,
-      pendingCount,
-      processingCount,
-      completedCount,
-      totalActive: pendingCount + processingCount,
-      jobs: queueData.jobs,
-      updatedAt: queueData.updatedAt
-    }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-};
-
-// POST /api/queue - Enqueue single note or batch enqueue all pending
 export const POST: APIRoute = async ({ request }) => {
   try {
-    const body = await request.json();
-    const { action, reportId } = body;
+    const body = (await request.json().catch(() => null)) ?? {};
+    const reportId = String(body.reportId ?? '');
+    if (['claim', 'complete', 'fail', 'heartbeat'].includes(body.action)) workerLastSeen = Date.now();
 
-    const queueData = readQueue();
-    const now = new Date().toISOString();
-    let enqueuedJobs: QueueJob[] = [];
+    switch (body.action) {
+      case 'heartbeat':
+        workerBusy = Boolean(body.busy);
+        return Response.json({ ok: true });
 
-    if (action === 'enqueue_single' && reportId) {
-      // Find report in DB
-      const existing = await db.select().from(reports).where(eq(reports.id, reportId));
-      if (existing.length === 0) {
-        return new Response(JSON.stringify({ error: 'Report not found' }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
+      case 'claim':
+        return claim();
 
-      const rep = existing[0];
-      // Check if already in active queue
-      const alreadyQueued = queueData.jobs.some(
-        j => j.reportId === reportId && (j.status === 'PENDING' || j.status === 'PROCESSING')
-      );
-
-      if (!alreadyQueued) {
-        const newJob: QueueJob = {
-          id: `job-${crypto.randomUUID()}`,
-          reportId: rep.id,
-          tokenNumber: rep.tokenNumber,
-          patientName: rep.patientName,
-          imagePath: rep.imagePath,
-          status: 'PENDING',
-          createdAt: now
-        };
-        queueData.jobs.unshift(newJob);
-        enqueuedJobs.push(newJob);
-
-        // Update DB status to QUEUED
-        await db.update(reports)
-          .set({ status: 'QUEUED', updatedAt: new Date() })
-          .where(eq(reports.id, reportId));
-      }
-    } else if (action === 'enqueue_all') {
-      // Find all active un-archived reports
-      const allReports = await db.select().from(reports);
-      const activeReports = allReports.filter(r => !r.isArchived && r.status !== 'FINALIZED');
-
-      for (const rep of activeReports) {
-        const isQueued = queueData.jobs.some(
-          j => j.reportId === rep.id && (j.status === 'PENDING' || j.status === 'PROCESSING')
-        );
-        if (!isQueued) {
-          const newJob: QueueJob = {
-            id: `job-${crypto.randomUUID()}`,
-            reportId: rep.id,
-            tokenNumber: rep.tokenNumber,
-            patientName: rep.patientName,
-            imagePath: rep.imagePath,
-            status: 'PENDING',
-            createdAt: now
-          };
-          queueData.jobs.push(newJob);
-          enqueuedJobs.push(newJob);
-
-          await db.update(reports)
-            .set({ status: 'QUEUED', updatedAt: new Date() })
-            .where(eq(reports.id, rep.id));
+      case 'complete': {
+        workerBusy = false;
+        const [row] = await db.select({ status: reports.status }).from(reports).where(eq(reports.id, reportId));
+        if (!row) return Response.json({ error: 'Report not found' }, { status: 404 });
+        if (row.status !== 'PROCESSING') {
+          return Response.json({ error: `Case is ${row.status}, not PROCESSING` }, { status: 409 });
         }
+        const errors = validateWorkerResult(body.result);
+        if (errors.length) return Response.json({ errors }, { status: 422 });
+        return guardedUpdate(reportId, workerResultToColumns(body.result as WorkerResult), eq(reports.status, 'PROCESSING'));
       }
-    } else {
-      return new Response(JSON.stringify({ error: 'Invalid action. Specify enqueue_single or enqueue_all' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+
+      case 'fail':
+        workerBusy = false;
+        return guardedUpdate(
+          reportId,
+          { status: 'FAILED', lastError: String(body.error || 'Unknown worker error').slice(0, 2000) },
+          eq(reports.status, 'PROCESSING'),
+        );
+
+      case 'enqueue': {
+        const [row] = await db.select().from(reports).where(eq(reports.id, reportId));
+        if (!row) return Response.json({ error: 'Report not found' }, { status: 404 });
+        if (!QUEUEABLE_STATUSES.includes(row.status as ReportStatus)) {
+          return Response.json({ error: `A ${row.status} case cannot be queued` }, { status: 409 });
+        }
+        if (row.status === 'DRAFT' && !isBlankDraft(row) && !body.force) {
+          return Response.json({ error: 'This draft has content that regenerating would replace', needsConfirm: true }, { status: 409 });
+        }
+        return guardedUpdate(reportId, REQUEUE, eq(reports.status, row.status as ReportStatus));
+      }
+
+      case 'retry_failed': {
+        const retryable = inArray(reports.status, ['FAILED', 'DRAFT']);
+        const candidates = await db.select().from(reports).where(and(eq(reports.isArchived, false), retryable));
+        const ids = candidates.filter((r) => r.status === 'FAILED' || isBlankDraft(r)).map((r) => r.id);
+        const requeued = ids.length
+          ? await db.update(reports).set({ ...REQUEUE, updatedAt: new Date() }).where(and(inArray(reports.id, ids), retryable)).returning({ id: reports.id })
+          : [];
+        return Response.json({ count: requeued.length });
+      }
+
+      default:
+        return Response.json({ error: `Unknown action: ${body.action}` }, { status: 400 });
     }
-
-    writeQueue(queueData);
-
-    return new Response(JSON.stringify({
-      success: true,
-      enqueuedCount: enqueuedJobs.length,
-      jobs: enqueuedJobs,
-      message: enqueuedJobs.length > 0
-        ? `Successfully added ${enqueuedJobs.length} note(s) to AI - Generation queue.`
-        : 'All requested notes are already in the AI - Generation queue.'
-    }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  } catch (err: any) {
-    console.error('Queue POST error:', err);
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+  } catch (error: any) {
+    return Response.json({ error: error.message }, { status: 500 });
   }
 };
+
+/** Oldest non-archived QUEUED case (or an abandoned PROCESSING one), claimed by one UPDATE … RETURNING statement. */
+async function claim() {
+  const claimable = and(
+    eq(reports.isArchived, false),
+    or(
+      eq(reports.status, 'QUEUED'),
+      and(eq(reports.status, 'PROCESSING'), lt(reports.updatedAt, new Date(Date.now() - STALE_MS))),
+    ),
+  );
+  const oldest = db.select({ id: reports.id }).from(reports).where(claimable).orderBy(reports.createdAt).limit(1);
+  const [report] = await db
+    .update(reports)
+    .set({ status: 'PROCESSING', updatedAt: new Date() })
+    .where(and(inArray(reports.id, oldest), claimable))
+    .returning();
+  workerBusy = Boolean(report);
+  return Response.json({ report: report ?? null });
+}

@@ -1,0 +1,211 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Tokens are RGB triplets so Tailwind's `/alpha` modifiers work (tailwind.config.mjs → token()).
+ * Identity comes from the printed report: navy #0F2C59 + cobalt #2563EB on cool slate.
+ */
+@layer base {
+  :root {
+    color-scheme: light;
+    --canvas: 236 240 246;
+    --surface: 255 255 255;
+    --surface-2: 246 248 251;
+    --surface-3: 237 241 246;
+    --line: 225 231 239;
+    --line-strong: 203 213 225;
+    --ink: 15 23 42;
+    --ink-2: 51 65 85;
+    --muted: 84 98 119;
+    --faint: 103 116 135;
+    --brand: 15 44 89;
+    --brand-ink: 15 44 89;
+    --accent: 37 99 235;
+    --accent-strong: 29 78 216;
+    --accent-soft: 234 241 254;
+    --on-accent: 255 255 255;
+    --success: 4 120 87;
+    --success-soft: 230 245 238;
+    --warning: 180 83 9;
+    --warning-soft: 253 243 228;
+    --danger: 200 30 30;
+    --danger-soft: 253 238 238;
+    --sheet: 255 255 255;
+    --sheet-ink: 15 23 42;
+    --sheet-line: 226 232 240;
+    --sheet-tint: 241 245 249;
+    --lightbox: 10 14 21;
+    --shadow: 15 23 42;
+    --shadow-a1: 0.05;
+    --shadow-a2: 0.07;
+    --shadow-a3: 0.16;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --canvas: 9 13 21;
+    --surface: 16 22 34;
+    --surface-2: 20 27 41;
+    --surface-3: 27 36 53;
+    --line: 32 43 61;
+    --line-strong: 46 60 82;
+    --ink: 231 236 243;
+    --ink-2: 196 205 218;
+    --muted: 154 167 186;
+    --faint: 128 141 160;
+    --brand: 59 111 224;
+    --brand-ink: 176 198 248;
+    --accent: 125 164 250;
+    --accent-strong: 160 189 252;
+    --accent-soft: 27 42 72;
+    --on-accent: 255 255 255;
+    --success: 98 206 160;
+    --success-soft: 16 44 35;
+    --warning: 244 178 86;
+    --warning-soft: 52 37 15;
+    --danger: 248 121 121;
+    --danger-soft: 58 21 25;
+    --sheet: 19 26 39;
+    --sheet-ink: 226 232 240;
+    --sheet-line: 40 52 71;
+    --sheet-tint: 27 36 53;
+    --lightbox: 5 8 13;
+    --shadow: 0 0 0;
+    --shadow-a1: 0.35;
+    --shadow-a2: 0.4;
+    --shadow-a3: 0.55;
+  }
+
+  /* The root keeps the browser's 16px so every rem in the scale lands on its intended size. */
+  html {
+    @apply bg-canvas font-sans text-ink antialiased;
+    text-rendering: optimizeLegibility;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-canvas text-base;
+  }
+
+  /* The parts of the browser nobody draws still carry the design. */
+  ::selection {
+    background: rgb(var(--accent) / 0.22);
+    color: rgb(var(--ink));
+  }
+
+  * {
+    caret-color: rgb(var(--accent));
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--line-strong)) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--line-strong));
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--faint));
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: rgb(var(--muted) / 0.85);
+  }
+
+  /* Theme switch crossfade (document.startViewTransition); never blocks clicks. */
+  ::view-transition {
+    pointer-events: none;
+  }
+
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 260ms;
+    animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  }
+}
+
+@layer components {
+  /* Auto-growing text areas: native where supported, JS fallback in AutoTextarea. */
+  .field-auto {
+    field-sizing: content;
+    resize: none;
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, rgb(var(--surface-3)) 25%, rgb(var(--line)) 37%, rgb(var(--surface-3)) 63%);
+    background-size: 400% 100%;
+    border-radius: 0.375rem;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .skeleton {
+      animation: shimmer 1.8s linear infinite;
+    }
+  }
+
+  /* The reading-room light box behind the note photo: stays dark in both themes. */
+  .lightbox-bg {
+    background:
+      radial-gradient(120% 90% at 50% 40%, rgb(255 255 255 / 0.05), transparent 65%),
+      rgb(var(--lightbox));
+  }
+
+  /* Hairline pattern of a radiology light box: the "reading" beam travels over it. */
+  .scan-beam {
+    background: linear-gradient(
+      180deg,
+      transparent 0%,
+      rgb(96 145 250 / 0) 30%,
+      rgb(96 145 250 / 0.28) 49%,
+      rgb(186 210 255 / 0.85) 50%,
+      rgb(96 145 250 / 0.28) 51%,
+      rgb(96 145 250 / 0) 70%,
+      transparent 100%
+    );
+  }
+}
+
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* 44px targets for touch and pen. */
+@media (pointer: coarse) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}

@@ -1,14 +1,15 @@
 import type { APIRoute } from 'astro';
-import { saveUpload } from '../../lib/ingest';
+import { createPendingDraft, saveUpload } from '../../lib/ingest';
 
-/** Stores a replacement scan and returns {filename, url}; the UI then saves it with POST /api/reports {id, imagePath: url}. */
+/** New case from a note photo: a blank draft, queued for the AI worker straight away. */
 export const POST: APIRoute = async ({ request }) => {
   try {
     const file = (await request.formData().catch(() => null))?.get('image');
     if (!(file instanceof File)) {
       return Response.json({ error: 'No image uploaded' }, { status: 400 });
     }
-    return Response.json(await saveUpload(file));
+    const { url } = await saveUpload(file);
+    return Response.json(await createPendingDraft(url));
   } catch (error: any) {
     return Response.json({ error: error.message }, { status: error.status ?? 500 });
   }

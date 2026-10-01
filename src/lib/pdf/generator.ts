@@ -2,6 +2,7 @@ import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
 
 const CHROME_PATHS = [
+  ...(process.env.CHROME_PATH ? [process.env.CHROME_PATH] : []),
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
   'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
   'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',

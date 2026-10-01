@@ -2,6 +2,8 @@
 import { db } from '../../db';
 import { reports } from '../../db/schema';
 import { eq } from 'drizzle-orm';
+import { parseFindings } from '../../lib/report';
+import { INSTITUTION, documentRef } from '../../lib/institution';
 
 const { id } = Astro.params;
 
@@ -16,22 +18,21 @@ if (!result || result.length === 0) {
 
 const report = result[0];
 
-let findingsSections: Array<{ title: string; items: Array<{ structure: string; content: string; isAbnormal?: boolean }> }> = [];
-try {
-  findingsSections = JSON.parse(report.findingsJson);
-} catch (e) {
-  findingsSections = [
-    {
-      title: 'Systemic Findings',
-      items: [{ structure: 'Evaluation', content: report.findingsMarkdown }]
-    }
-  ];
-}
+// Never throws: malformed sections are dropped (the PDF route refuses a report without findings).
+const findingsSections = parseFindings(report.findingsJson);
 
-const impressionList: string[] = report.impressionMarkdown
+// One entry per line, without the "1." / "- " markers that the editor and the AI worker write.
+const toLines = (markdown: string) => markdown
   .split('\n')
-  .map(line => line.replace(/^\d+[\.\)]\s*/, '').trim())
+  .map(line => line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').trim())
   .filter(line => line.length > 0);
+const impressionList = toLines(report.impressionMarkdown);
+const recommendationsList = toLines(report.recommendationsMarkdown);
+
+// AGENTS.md H13 / 11.2: a header variable missing from the source is printed as such, never invented.
+const NOT_STATED = 'Not stated in source';
+const stated = (value: string | null) => value?.trim() || NOT_STATED;
+const ageGender = report.age.trim() || report.gender.trim() ? `${stated(report.age)} / ${stated(report.gender)}` : NOT_STATED;
 ---
 
 <!DOCTYPE html>
@@ -408,16 +409,16 @@ const impressionList: string[] = report.impressionMarkdown
           </td>
           <td>
             <div class="inst-gov">
-              GOVERNMENT OF THE PUNJAB • SPECIALIZED HEALTHCARE & MEDICAL EDUCATION
+              {INSTITUTION.government.toUpperCase()}
             </div>
             <div class="inst-title">
-              DEPARTMENT OF DIAGNOSTIC RADIOLOGY
+              {INSTITUTION.department.toUpperCase()}
             </div>
             <div class="inst-sub">
-              GUJRANWALA TEACHING HOSPITAL | GUJRANWALA MEDICAL COLLEGE
+              {INSTITUTION.hospital.toUpperCase()}
             </div>
             <div class="inst-faculty">
-              <strong>HOD:</strong> Prof. Dr. Mian Waheed Ahmad &nbsp;•&nbsp; <strong>Senior Registrars:</strong> Dr. Samiya Shahzadi / Dr. Sidra Ghaffar
+              <strong>HOD:</strong> {INSTITUTION.hod} &nbsp;•&nbsp; <strong>Senior Registrars:</strong> {INSTITUTION.seniorRegistrars}
             </div>
           </td>
           <td style="width: 65px; text-align: right;">
@@ -437,25 +438,25 @@ const impressionList: string[] = report.impressionMarkdown
         <tr>
           <td style="width: 32%;">
             <span class="meta-label">Patient Name</span>
-            <span class="meta-val" style="text-transform: uppercase;">{report.patientName}</span>
+            <span class="meta-val" style="text-transform: uppercase;">{stated(report.patientName)}</span>
           </td>
           <td style="width: 22%;">
             <span class="meta-label">Token / Radiology ID</span>
-            <span class="meta-token">#{report.tokenNumber}</span>
+            <span class="meta-token">{report.tokenNumber.trim() ? `#${report.tokenNumber}` : NOT_STATED}</span>
           </td>
           <td style="width: 22%;">
             <span class="meta-label">Age / Gender</span>
-            <span class="meta-val">{report.age} / {report.gender}</span>
+            <span class="meta-val">{ageGender}</span>
           </td>
           <td style="width: 24%;">
             <span class="meta-label">Date of Exam</span>
-            <span class="meta-val">{report.studyDate}</span>
+            <span class="meta-val">{stated(report.studyDate)}</span>
           </td>
         </tr>
         <tr>
           <td colspan="2">
             <span class="meta-label">Modality & Protocol</span>
-            <span class="meta-val" style="color: #0F2C59;">{report.modality}</span>
+            <span class="meta-val" style="color: #0F2C59;">{stated(report.modality)}</span>
           </td>
           <td>
             <span class="meta-label">Reporting Date</span>
@@ -463,17 +464,17 @@ const impressionList: string[] = report.impressionMarkdown
           </td>
           <td>
             <span class="meta-label">Referring Clinician</span>
-            <span class="meta-val" style="font-size: 9.5px;">{report.referringClinician || 'General OPD / Inpatient'}</span>
+            <span class="meta-val" style="font-size: 9.5px;">{stated(report.referringClinician)}</span>
           </td>
         </tr>
         <tr>
           <td colspan="3" style="border-bottom: none;">
             <span class="meta-label">Clinical Indication</span>
-            <span style="font-size: 9.5px; color: #334155; font-style: italic;">{report.clinicalHistory || 'Routine diagnostic evaluation as requested.'}</span>
+            <span style="font-size: 9.5px; color: #334155; font-style: italic;">{stated(report.clinicalHistory)}</span>
           </td>
           <td style="border-bottom: none; text-align: right;">
             <span class="meta-label">Comparison</span>
-            <span style="font-size: 9px; color: #64748B;">{report.comparison || 'No previous imaging available'}</span>
+            <span style="font-size: 9px; color: #64748B;">{stated(report.comparison)}</span>
           </td>
         </tr>
       </table>
@@ -488,10 +489,10 @@ const impressionList: string[] = report.impressionMarkdown
       </div>
 
       <!-- CRITICAL ALERT (conditional) -->
-      {report.isUrgent && (
+      {report.isUrgent && report.urgentFindings?.trim() && (
         <div class="critical-alert">
           <div class="critical-badge">⚠ Critical Clinical Notification</div>
-          <div class="critical-body">{report.urgentFindings || 'Acute radiological finding requiring immediate treating team intervention.'}</div>
+          <div class="critical-body">{report.urgentFindings}</div>
           {report.urgentCallLog && (
             <div class="critical-log">{report.urgentCallLog}</div>
           )}
@@ -531,7 +532,11 @@ const impressionList: string[] = report.impressionMarkdown
         </ol>
         <div class="rec-divider">
           <div class="rec-title">Recommendations</div>
-          <div class="rec-body">{report.recommendationsMarkdown || 'Clinical and laboratory correlation is advised.'}</div>
+          <div class="rec-body">
+            {recommendationsList.length > 0
+              ? recommendationsList.map((item) => <div>{item}</div>)
+              : 'Clinical correlation is advised.'}
+          </div>
         </div>
       </div>
     </div>
@@ -542,22 +547,22 @@ const impressionList: string[] = report.impressionMarkdown
         <tr>
           <td class="sig-col-left">
             <div class="sig-head">Primary Reporting Radiologists</div>
-            <div class="sig-doc">Dr. Sana Fatima <span class="sig-sub">— MBBS (WMO Diagnostic Radiology)</span></div>
-            <div class="sig-doc">Dr. Faisal Maqsood Anwar <span class="sig-sub">— MBBS, FCPS-II Resident</span></div>
-            <div class="sig-doc">Dr. Areeba <span class="sig-sub">— MBBS, FCPS-II Resident</span></div>
+            {INSTITUTION.reportingRadiologists.map((doc) => (
+              <div class="sig-doc">{doc.name} <span class="sig-sub">— {doc.qualification}</span></div>
+            ))}
           </td>
           <td class="sig-col-right">
             <div class="sig-head">Reviewed & Approved By (Consultants)</div>
-            <div class="sig-hod">Prof. Dr. Mian Waheed Ahmad</div>
-            <div class="sig-sub" style="font-weight: 700; color: #1E293B;">MBBS, FCPS, BSc (Radiology) • Head of Department</div>
-            <div class="sig-sub" style="margin-top: 2px;">Dr. Samiya Shahzadi / Dr. Sidra Ghaffar (Senior Registrars)</div>
+            <div class="sig-hod">{INSTITUTION.hod}</div>
+            <div class="sig-sub" style="font-weight: 700; color: #1E293B;">{INSTITUTION.hodQualification}</div>
+            <div class="sig-sub" style="margin-top: 2px;">{INSTITUTION.seniorRegistrars} (Senior Registrars)</div>
           </td>
         </tr>
       </table>
 
       <div class="doc-footer">
-        <span>Confidential Medical Diagnostic Record • Gujranwala Teaching Hospital (GMCTH)</span>
-        <span style="font-family: ui-monospace, monospace;">Document Ref: GMCTH-{report.tokenNumber}-{report.id.substring(0, 6).toUpperCase()}</span>
+        <span>{INSTITUTION.footer}</span>
+        <span style="font-family: ui-monospace, monospace;">Document Ref: {documentRef(report.tokenNumber, report.id)}</span>
       </div>
     </div>
   </div>

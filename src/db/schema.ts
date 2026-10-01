@@ -19,13 +19,16 @@ export const reports = sqliteTable('reports', {
   impressionMarkdown: text('impression_markdown').notNull(),
   recommendationsMarkdown: text('recommendations_markdown').notNull(),
   isUrgent: integer('is_urgent', { mode: 'boolean' }).default(false),
+  urgentFindings: text('urgent_findings'),
   urgentCallLog: text('urgent_call_log'),
   imagePath: text('image_path').notNull(),
   verbatimTranscription: text('verbatim_transcription'),
   verificationSheetMarkdown: text('verification_sheet_markdown'),
-  auditStatus: text('audit_status').default('PASS'),
-  status: text('status').default('DRAFT'), // DRAFT, REVIEWED, FINALIZED, ARCHIVED
+  auditStatus: text('audit_status').default('PENDING'), // PENDING, PASS, BLOCKED, LEGACY
+  status: text('status').default('DRAFT'), // QUEUED, PROCESSING, DRAFT, BLOCKED, FAILED, FINALIZED (archive is the isArchived flag)
   isArchived: integer('is_archived', { mode: 'boolean' }).default(false),
+  lastError: text('last_error'),
+  ownerNotes: text('owner_notes'),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });

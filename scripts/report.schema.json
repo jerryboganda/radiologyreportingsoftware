@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorkerResult",
+  "description": "One radiology case read from one handwritten note photo (WorkerResult in src/lib/report.ts). Header fields are \"\" when not written in the source; never invent them.",
+  "type": "object",
+  "required": [
+    "status",
+    "patientName",
+    "age",
+    "gender",
+    "tokenNumber",
+    "mrNumber",
+    "modality",
+    "studyDate",
+    "referringClinician",
+    "clinicalHistory",
+    "comparison",
+    "technique",
+    "findings",
+    "impression",
+    "recommendations",
+    "isUrgent",
+    "urgentFindings",
+    "verbatimTranscription",
+    "verificationSheet"
+  ],
+  "properties": {
+    "status": { "type": "string", "enum": ["READY", "BLOCKED"] },
+    "patientName": { "type": "string" },
+    "age": { "type": "string" },
+    "gender": { "type": "string" },
+    "tokenNumber": { "type": "string" },
+    "mrNumber": { "type": "string" },
+    "modality": { "type": "string", "description": "The study in professional wording, abbreviations expanded, nothing added, e.g. \"Contrast-enhanced CT of the Abdomen and Pelvis\"." },
+    "studyDate": { "type": "string", "description": "ISO YYYY-MM-DD when the note gives a full date, otherwise as written; \"\" when absent." },
+    "referringClinician": { "type": "string" },
+    "clinicalHistory": { "type": "string" },
+    "comparison": { "type": "string" },
+    "technique": { "type": "string", "description": "AGENTS.md 7.2; \"\" when BLOCKED." },
+    "findings": {
+      "type": "array",
+      "description": "AGENTS.md 7.3 as regions/systems in checklist order; [] when BLOCKED.",
+      "items": {
+        "type": "object",
+        "required": ["title", "items"],
+        "properties": {
+          "title": { "type": "string" },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["structure", "content"],
+              "properties": {
+                "structure": { "type": "string" },
+                "content": { "type": "string" },
+                "isAbnormal": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "impression": { "type": "array", "items": { "type": "string" }, "description": "AGENTS.md 9.3, one item per point, without numbering; [] when BLOCKED." },
+    "recommendations": { "type": "array", "items": { "type": "string" }, "description": "AGENTS.md 9.4, one item per recommendation, without bullets; [] when BLOCKED." },
+    "isUrgent": { "type": "boolean" },
+    "urgentFindings": { "type": "string", "description": "Written urgent findings (AGENTS.md 9.4 list) in report wording; \"\" when none." },
+    "verbatimTranscription": { "type": "string", "description": "AGENTS.md 6.1, line by line with [?] markers." },
+    "verificationSheet": { "type": "string", "description": "AGENTS.md 11.2 format, starting with STATUS: READY or STATUS: BLOCKED." }
+  }
+}
