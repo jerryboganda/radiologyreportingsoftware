@@ -60,10 +60,10 @@
         }
       }
     },
-    "impression": { "type": "array", "items": { "type": "string" }, "description": "AGENTS.md 9.3, one item per point, without numbering; [] when BLOCKED." },
-    "recommendations": { "type": "array", "items": { "type": "string" }, "description": "AGENTS.md 9.4, one item per recommendation, without bullets; [] when BLOCKED." },
+    "impression": { "type": "array", "items": { "type": "string" }, "description": "AGENTS.md 9.3 in the senior's own terms (H28), one item per point, without numbering; [] when BLOCKED." },
+    "recommendations": { "type": "array", "items": { "type": "string" }, "description": "AGENTS.md 9.4: the urgent-communication line first when it applies, then the senior's advice in the senior's own words (H28); no recommendation of your own; one item per recommendation, without bullets; [] when BLOCKED." },
     "isUrgent": { "type": "boolean" },
-    "urgentFindings": { "type": "string", "description": "Written urgent findings (AGENTS.md 9.4 list) in report wording; \"\" when none." },
+    "urgentFindings": { "type": "string", "description": "The urgent finding(s) in the senior's own terms only (H28: no synonym, no added label or certainty word), when written or marked urgent by the senior; \"\" when none." },
     "verbatimTranscription": { "type": "string", "description": "AGENTS.md 6.1, line by line with [?] markers." },
     "verificationSheet": { "type": "string", "description": "AGENTS.md 11.2 format, starting with STATUS: READY or STATUS: BLOCKED." }
   }
