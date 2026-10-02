@@ -62,9 +62,11 @@ interface CaseHeaderProps {
   onAi: () => void;
   onAudit: () => void;
   onAction: (action: CaseAction) => void;
+  /** The draft has wording the senior never wrote that the resident has not confirmed. */
+  wordingPending: boolean;
 }
 
-export function CaseHeader({ report: r, saveState, onSaveNow, leading, focusMode, onToggleFocus, canApprove, approveHint, onApprove, onAi, onAudit, onAction }: CaseHeaderProps) {
+export function CaseHeader({ report: r, saveState, onSaveNow, leading, focusMode, onToggleFocus, canApprove, approveHint, onApprove, onAi, onAudit, onAction, wordingPending }: CaseHeaderProps) {
   const ai = aiActionFor(r);
   const finalized = r.status === 'FINALIZED';
   const details = ageSex(r);
@@ -89,7 +91,7 @@ export function CaseHeader({ report: r, saveState, onSaveNow, leading, focusMode
           <span className="hidden shrink-0 rounded-md bg-surface-3 px-1.5 py-0.5 text-sm font-semibold tabular-nums text-brand-ink sm:inline">#{r.tokenNumber}</span>
         )}
         {details && <span className="hidden shrink-0 text-sm text-muted xl:inline">{details}</span>}
-        <StatusChip status={r.status} archived={r.isArchived} className="shrink-0" />
+        <StatusChip status={r.status} archived={r.isArchived} flagged={wordingPending} className="shrink-0" />
         <SaveIndicator state={saveState} onRetry={onSaveNow} />
       </div>
 

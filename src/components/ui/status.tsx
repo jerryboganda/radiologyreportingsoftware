@@ -21,7 +21,10 @@ export const STATUS_META: Record<ReportStatus, StatusMeta> = {
   FINALIZED: { label: 'Finalized', description: 'Issued as PDF', chip: 'bg-success-soft text-success', icon: BadgeCheck },
 };
 
-export function StatusChip({ status, archived, className }: { status: ReportStatus; archived?: boolean | null; className?: string }) {
+// A draft whose wording contains terms the senior never wrote reads "Check wording" until the resident confirms or fixes it.
+const WORDING_META: StatusMeta = { label: 'Check wording', description: 'Contains terms that are not in the senior’s note', chip: 'bg-warning-soft text-warning', icon: TriangleAlert };
+
+export function StatusChip({ status, archived, flagged, className }: { status: ReportStatus; archived?: boolean | null; flagged?: boolean; className?: string }) {
   if (archived) {
     return (
       <span className={cn('inline-flex h-6 items-center gap-1 rounded-full bg-surface-3 px-2 text-xs font-medium text-muted', className)}>
@@ -30,7 +33,7 @@ export function StatusChip({ status, archived, className }: { status: ReportStat
       </span>
     );
   }
-  const meta = STATUS_META[status] ?? STATUS_META.DRAFT;
+  const meta = status === 'DRAFT' && flagged ? WORDING_META : (STATUS_META[status] ?? STATUS_META.DRAFT);
   const Icon = meta.icon;
   return (
     <span

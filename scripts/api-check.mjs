@@ -211,6 +211,45 @@ try {
     assert.equal((await queue({ action: 'complete', reportId: second, result: READY })).status, 409);
   });
 
+  await step('wording gate: terms the senior never wrote block the PDF until the resident confirms exactly that wording', async () => {
+    const FLAGGED = {
+      ...READY,
+      verbatimTranscription: 'Pt: Fixture, 60 Y / Male\nCBD stent migrated prox end, distal end in D2 with local mural air / breach (urgent). Prox CBD 8.4 mm.',
+      isUrgent: true,
+      urgentFindings: 'Stent malposition, concerning for duodenal perforation.',
+      impression: ['CBD stent migration with D2 mural breach.'],
+    };
+    const third = (await ingest('third.png')).data.id;
+    assert.equal((await queue({ action: 'claim' })).data.report?.id, third);
+    expectRow(await queue({ action: 'complete', reportId: third, result: FLAGGED }), { status: 'DRAFT', wordingAck: null });
+
+    const blocked = await call('GET', `/api/pdf/${third}`);
+    assert.equal(blocked.status, 409);
+    assert.equal(blocked.data.wordingCheck, true);
+    assert.deepEqual(blocked.data.flags.map((f) => f.term).sort(), ['concerning for', 'malposition', 'perforation']);
+
+    const ack = await edit({ id: third, action: 'ack_wording' });
+    assert.equal(ack.status, 200);
+    assert.ok(ack.data.wordingAck.includes('perforation'), ack.data.wordingAck);
+
+    // Wording that changes the flagged set voids the confirmation.
+    expectRow(await edit({ id: third, urgentFindings: 'Stent malposition, concerning for duodenal perforation and abscess.' }), { status: 'DRAFT' });
+    assert.equal((await call('GET', `/api/pdf/${third}`)).status, 409);
+
+    expectRow(await edit({ id: third, action: 'ack_wording' }), { status: 'DRAFT' });
+    const issued = await call('GET', `/api/pdf/${third}`);
+    assert.equal(issued.status, 200);
+    assert.equal(issued.type, 'application/pdf');
+
+    // A finalized case cannot be re-confirmed, and a fresh AI draft starts unconfirmed.
+    assert.equal((await edit({ id: third, action: 'ack_wording' })).status, 409);
+    expectRow(await edit({ id: third, action: 'reopen' }), { status: 'DRAFT' });
+    expectRow(await queue({ action: 'enqueue', reportId: third, force: true }), { status: 'QUEUED' });
+    assert.equal((await queue({ action: 'claim' })).data.report?.id, third);
+    expectRow(await queue({ action: 'complete', reportId: third, result: FLAGGED }), { status: 'DRAFT', wordingAck: null });
+    assert.equal((await call('GET', `/api/pdf/${third}`)).status, 409);
+  });
+
   await step('DELETE archives (flag only); nothing left to claim', async () => {
     assert.equal((await call('DELETE', `/api/reports?id=${second}`)).status, 200);
     const row = await rowOf(second);

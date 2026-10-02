@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { EDITABLE_FIELDS, isLocked, type ReportItem, type ReportPatch } from '../../lib/report';
 
 export type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
-export type CaseAction = 'archive' | 'restore' | 'reopen' | 'dequeue';
+export type CaseAction = 'archive' | 'restore' | 'reopen' | 'dequeue' | 'ack_wording';
 
 type ApiError = Error & { status?: number; data?: Record<string, unknown> };
 

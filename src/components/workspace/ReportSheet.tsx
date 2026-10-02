@@ -25,16 +25,20 @@ const singleLine = (e: KeyboardEvent<HTMLTextAreaElement>) => {
 export const SECTION_IDS = ['patient', 'technique', 'findings', 'impression'] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
 
+const NO_FLAGS: ReadonlySet<string> = new Set();
+
 interface ReportSheetProps {
   report: ReportItem;
   readOnly: boolean;
   onPatch: (patch: ReportPatch) => void;
+  /** Keys of lines containing wording the senior never wrote (lib/wording.ts), ringed in amber until the resident confirms. */
+  flaggedKeys?: ReadonlySet<string>;
   /** Play the "developing" reveal (fresh AI draft just landed). */
   developing?: boolean;
 }
 
 /** The live twin of the issued A4 report: the PDF's letterhead, hierarchy and impression card, editable in place. */
-export function ReportSheet({ report: r, readOnly, onPatch, developing }: ReportSheetProps) {
+export function ReportSheet({ report: r, readOnly, onPatch, developing, flaggedKeys = NO_FLAGS }: ReportSheetProps) {
   const reveal = (index: number): { className?: string; style?: CSSProperties } =>
     developing
       ? { className: 'motion-safe:animate-develop motion-reduce:animate-in motion-reduce:fade-in-0', style: { animationDelay: `${index * 90}ms` } }
@@ -69,13 +73,13 @@ export function ReportSheet({ report: r, readOnly, onPatch, developing }: Report
               transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
               className="overflow-hidden"
             >
-              <UrgentBox r={r} readOnly={readOnly} onPatch={onPatch} />
+              <UrgentBox r={r} readOnly={readOnly} onPatch={onPatch} flagged={flaggedKeys.has('urgent')} />
             </motion.div>
           )}
         </AnimatePresence>
 
         <SheetSection id="findings" title="Findings" tag="RadLex Organ Grouping" developing={developing} {...reveal(2)}>
-          <FindingsEditor json={r.findingsJson} readOnly={readOnly} onChange={(findingsJson) => onPatch({ findingsJson })} />
+          <FindingsEditor json={r.findingsJson} readOnly={readOnly} flaggedKeys={flaggedKeys} onChange={(findingsJson) => onPatch({ findingsJson })} />
         </SheetSection>
 
         <section
@@ -89,6 +93,8 @@ export function ReportSheet({ report: r, readOnly, onPatch, developing }: Report
             markdown={r.impressionMarkdown}
             numbered
             readOnly={readOnly}
+            flagPrefix="impression"
+            flaggedKeys={flaggedKeys}
             label="Impression"
             placeholder="Key diagnosis or finding, with side, level and key measurement"
             addLabel="Add impression point"
@@ -100,6 +106,8 @@ export function ReportSheet({ report: r, readOnly, onPatch, developing }: Report
             <ListEditor
               markdown={r.recommendationsMarkdown}
               readOnly={readOnly}
+              flagPrefix="recommendations"
+              flaggedKeys={flaggedKeys}
               label="Recommendations"
               placeholder="The senior's advice first; otherwise “Clinical correlation is advised.”"
               addLabel="Add recommendation"
@@ -306,10 +314,10 @@ function Cell({ label, className, children }: { label: string; className?: strin
 
 /* ---------- Critical box (the PDF's critical alert) ---------- */
 
-function UrgentBox({ r, readOnly, onPatch }: { r: ReportItem; readOnly: boolean; onPatch: (p: ReportPatch) => void }) {
+function UrgentBox({ r, readOnly, onPatch, flagged }: { r: ReportItem; readOnly: boolean; onPatch: (p: ReportPatch) => void; flagged?: boolean }) {
   const missing = !r.urgentFindings?.trim();
   return (
-    <section aria-label="Critical clinical notification" className="mt-6 rounded-[4px] border border-danger/25 border-l-4 border-l-danger bg-danger-soft/70 px-4 py-3">
+    <section id="urgent" data-flag-key="urgent" aria-label="Critical clinical notification" className={cn('mt-6 scroll-mt-16 rounded-[4px] border border-danger/25 border-l-4 border-l-danger bg-danger-soft/70 px-4 py-3', flagged && 'ring-2 ring-warning')}>
       <h2 className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-[0.08em] text-danger">
         <Siren className="h-3.5 w-3.5" aria-hidden />
         Critical clinical notification
@@ -339,7 +347,7 @@ function UrgentBox({ r, readOnly, onPatch }: { r: ReportItem; readOnly: boolean;
 
 const blankItem = (): FindingItem => ({ structure: '', content: '', isAbnormal: false });
 
-function FindingsEditor({ json, readOnly, onChange }: { json: string; readOnly: boolean; onChange: (json: string) => void }) {
+function FindingsEditor({ json, readOnly, flaggedKeys, onChange }: { json: string; readOnly: boolean; flaggedKeys: ReadonlySet<string>; onChange: (json: string) => void }) {
   const sections = useMemo(() => parseFindings(json), [json]);
   const root = useRef<HTMLDivElement>(null);
 
@@ -419,6 +427,7 @@ function FindingsEditor({ json, readOnly, onChange }: { json: string; readOnly: 
               {s.items.map((it, ii) => (
                 <motion.li
                   key={ii}
+                  data-flag-key={`findings:${si}:${ii}`}
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
@@ -426,6 +435,7 @@ function FindingsEditor({ json, readOnly, onChange }: { json: string; readOnly: 
                   className={cn(
                     'group/item relative grid grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-x-1 rounded-md py-0.5 pr-8 transition-colors duration-base wide:grid-cols-[1.5rem_11rem_minmax(0,1fr)]',
                     it.isAbnormal && 'bg-warning-soft/50',
+                    flaggedKeys.has(`findings:${si}:${ii}`) && 'ring-2 ring-warning',
                   )}
                 >
                   <Tooltip content={it.isAbnormal ? 'Abnormal finding · click to mark normal' : 'Normal statement · click to mark abnormal'} side="left">
@@ -509,11 +519,15 @@ function ListEditor({
   placeholder,
   addLabel,
   itemClass,
+  flagPrefix,
+  flaggedKeys,
   onChange,
 }: {
   markdown: string;
   numbered?: boolean;
   readOnly: boolean;
+  flagPrefix: string;
+  flaggedKeys: ReadonlySet<string>;
   label: string;
   placeholder: string;
   addLabel: string;
@@ -559,7 +573,7 @@ function ListEditor({
       {rows.length === 0 && <p className="py-1 text-md italic text-muted">None recorded.</p>}
       <ol aria-label={label} className="space-y-0.5">
         {rows.map((text, i) => (
-          <li key={i} className="flex items-start gap-1.5">
+          <li key={i} data-flag-key={`${flagPrefix}:${i}`} className={cn('flex items-start gap-1.5 rounded-md', flaggedKeys.has(`${flagPrefix}:${i}`) && 'ring-2 ring-warning')}>
             <span className={cn('w-5 shrink-0 select-none pt-[0.3rem] text-right text-md tabular-nums', numbered ? 'font-semibold text-brand-ink' : 'text-accent')} aria-hidden>
               {numbered ? `${i + 1}.` : '–'}
             </span>

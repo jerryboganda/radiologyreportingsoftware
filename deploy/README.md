@@ -15,6 +15,9 @@ Edit `.env` on the VPS, run `docker compose up -d`, then update `start-worker-pr
 ## AI engine
 The AI reads each note on the reporting PC, not on the server (the Antigravity login lives there): run `start-worker-production.cmd`. It downloads each note photo over HTTPS, runs `agy` (Gemini 3.8 Flash, High), and posts the draft back. When the PC or worker is off, uploads wait as "Queued" and the app shows "AI engine offline".
 
+## Wording check
+The app compares every serious medical term and number in a draft with the senior's note and refuses to issue a PDF until the resident confirms any wording the senior did not write (`src/lib/wording.ts`; the server enforces it in `/api/pdf/<id>`). Run `npm run check:wording` after editing the word list; the checks `check:api`, `check:auth` and `check:ui` cover the rest.
+
 ## Data
 `data/` (SQLite) and `uploads/` (patient note photos) live next to the compose file. Back both up before changes; nothing here is backed up automatically.
 

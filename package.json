@@ -10,6 +10,8 @@
     "check": "tsc --noEmit",
     "worker": "node scripts/antigravity_queue_worker.mjs",
     "check:api": "node scripts/api-check.mjs",
+    "check:wording": "node scripts/wording-check.test.mjs",
+    "check:auth": "node scripts/auth-check.mjs",
     "check:ui": "node scripts/verify_ui_screenshot.cjs"
   },
   "dependencies": {

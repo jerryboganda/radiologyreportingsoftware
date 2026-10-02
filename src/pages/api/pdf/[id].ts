@@ -5,6 +5,7 @@ import { and, eq } from 'drizzle-orm';
 import { generatePdfFromUrl } from '../../../lib/pdf/generator';
 import { hasReportBody } from '../../../lib/report';
 import { today } from '../../../lib/ingest';
+import { checkWording, wordingSignature } from '../../../lib/wording';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -21,6 +22,16 @@ export const GET: APIRoute = async ({ params }) => {
   }
   if ((report.status !== 'DRAFT' && report.status !== 'FINALIZED') || !hasReportBody(report)) {
     return Response.json({ error: 'Only a draft or finalized report with findings and an impression can be issued as a PDF' }, { status: 409 });
+  }
+
+  // Wording gate (owner ruling H28): a draft with terms or numbers the senior's note does not contain is issued only after
+  // the resident confirmed exactly that wording. Any edit that changes the flagged terms voids the confirmation.
+  if (report.status === 'DRAFT') {
+    const flags = checkWording(report);
+    if (flags.length && report.wordingAck !== wordingSignature(flags)) {
+      const terms = Array.from(new Set(flags.map((f) => f.term))).join(', ');
+      return Response.json({ error: `Wording check: the senior's note does not contain ${terms}. Remove it or confirm it first.`, wordingCheck: true, flags }, { status: 409 });
+    }
   }
 
   // Target filename format: <PatientName>_<Age>_<TokenNumber>.pdf

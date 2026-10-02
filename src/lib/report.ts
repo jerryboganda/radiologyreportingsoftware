@@ -47,6 +47,8 @@ export interface ReportItem {
   isArchived: boolean | null;
   lastError: string | null;
   ownerNotes: string | null;
+  /** Signature of the flagged wording the resident confirmed (lib/wording.ts); null when nothing was confirmed. */
+  wordingAck: string | null;
   /** ISO strings once JSON-serialised by the API. */
   createdAt: string;
   updatedAt: string;
@@ -218,5 +220,7 @@ export function workerResultToColumns(r: WorkerResult) {
     auditStatus: (r.status === 'READY' ? 'PASS' : 'BLOCKED') as AuditStatus,
     status: (r.status === 'READY' ? 'DRAFT' : 'BLOCKED') as ReportStatus,
     lastError: null,
+    // A new draft is new wording: nothing the resident confirmed before applies to it.
+    wordingAck: null,
   };
 }

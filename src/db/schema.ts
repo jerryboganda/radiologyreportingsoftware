@@ -29,6 +29,8 @@ export const reports = sqliteTable('reports', {
   isArchived: integer('is_archived', { mode: 'boolean' }).default(false),
   lastError: text('last_error'),
   ownerNotes: text('owner_notes'),
+  // Signature of the flagged wording the resident confirmed (lib/wording.ts wordingSignature); null = nothing confirmed.
+  wordingAck: text('wording_ack'),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });

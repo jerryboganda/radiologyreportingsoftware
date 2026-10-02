@@ -4,6 +4,7 @@ import { reports, type NewReport } from '../../db/schema';
 import { desc, eq, notInArray } from 'drizzle-orm';
 import { LOCKED_STATUSES, findingsToMarkdown, parseFindings, pickEditable } from '../../lib/report';
 import { guardedUpdate } from '../../lib/ingest';
+import { checkWording, wordingSignature } from '../../lib/wording';
 
 /** Archive/restore flip only the flag; reopen and dequeue move one specific status back to DRAFT. */
 const ACTIONS: Record<string, { set: Partial<NewReport>; from?: string }> = {
@@ -49,6 +50,14 @@ export const POST: APIRoute = async ({ request }) => {
     const id = body?.id;
     if (typeof id !== 'string' || !id) {
       return Response.json({ error: 'Missing report id' }, { status: 400 });
+    }
+
+    if (body.action === 'ack_wording') {
+      // The server recomputes the flags itself and stores their signature: wording the resident was never shown cannot be confirmed.
+      const [row] = await db.select().from(reports).where(eq(reports.id, id));
+      if (!row) return Response.json({ error: 'Report not found' }, { status: 404 });
+      if (row.status !== 'DRAFT') return Response.json({ error: `Not allowed while the case is ${row.status}` }, { status: 409 });
+      return guardedUpdate(id, { wordingAck: wordingSignature(checkWording(row)) }, eq(reports.status, 'DRAFT'));
     }
 
     if (body.action !== undefined) {

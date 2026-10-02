@@ -1,14 +1,20 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { BadgeCheck, CircleDashed, Download, History, MessageCircleQuestion, ShieldCheck } from 'lucide-react';
+import { BadgeCheck, CircleDashed, Download, History, MessageCircleQuestion, ShieldCheck, TriangleAlert } from 'lucide-react';
 import type { ReportItem } from '../../lib/report';
+import type { WordingFlag } from '../../lib/wording';
 import { cn } from '../../lib/cn';
 import { Button, Kbd } from '../ui/button';
 import { Dialog, DialogClose, DialogContent, PanelContent } from '../ui/overlay';
 import { ageSex, displayName, longDate, parseSheet } from './format';
+import { WordingList } from './WordingList';
 
 /* ---------- Audit sheet ---------- */
 
-function auditVerdict(r: ReportItem, sheetStatus: string | null) {
+function auditVerdict(r: ReportItem, sheetStatus: string | null, flags: WordingFlag[], wordingConfirmed: boolean) {
+  if (flags.length > 0 && !wordingConfirmed) {
+    const terms = new Set(flags.map((f) => f.term)).size;
+    return { tone: 'warning', icon: <TriangleAlert />, label: `Check wording · ${terms} term${terms === 1 ? '' : 's'}`, note: 'The AI’s own audit may say PASS, but these terms are not in the senior’s note.' } as const;
+  }
   if (!r.verificationSheetMarkdown?.trim()) {
     return { tone: 'neutral', icon: <CircleDashed />, label: 'Not audited yet', note: 'The AI writes this sheet when it drafts the report.' } as const;
   }
@@ -31,10 +37,23 @@ const VERDICT_TONES = {
   success: 'bg-success-soft text-success',
 } as const;
 
-export function AuditDialog({ report, open, onOpenChange }: { report: ReportItem | null; open: boolean; onOpenChange: (o: boolean) => void }) {
+export function AuditDialog({
+  report,
+  open,
+  onOpenChange,
+  flags,
+  wordingConfirmed,
+}: {
+  report: ReportItem | null;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  flags: WordingFlag[];
+  wordingConfirmed: boolean;
+}) {
   if (!report) return null;
+  const hasReference = report.auditStatus !== 'LEGACY' && (report.verbatimTranscription?.trim().length ?? 0) >= 15;
   const { status, sections, preamble } = parseSheet(report.verificationSheetMarkdown);
-  const verdict = auditVerdict(report, status);
+  const verdict = auditVerdict(report, status, flags, wordingConfirmed);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
@@ -70,6 +89,30 @@ export function AuditDialog({ report, open, onOpenChange }: { report: ReportItem
           </div>
           <p className="text-sm text-muted">{verdict.note}</p>
 
+          <section
+            aria-label="Wording check"
+            className={cn('rounded-lg border px-4 py-3', flags.length > 0 && !wordingConfirmed ? 'border-warning/30 bg-warning-soft' : 'border-line bg-surface-2')}
+          >
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+              {flags.length > 0 ? <TriangleAlert className="h-4 w-4 text-warning" aria-hidden /> : <BadgeCheck className="h-4 w-4 text-success" aria-hidden />}
+              Wording check
+            </h3>
+            {flags.length > 0 ? (
+              <>
+                <p className="mt-1 text-sm text-ink-2">
+                  {wordingConfirmed ? 'You confirmed these terms, which the senior’s note does not contain.' : 'These terms and numbers are not in the senior’s note.'}
+                </p>
+                <WordingList flags={flags} limit={30} className="mt-2" />
+              </>
+            ) : hasReference ? (
+              <p className="mt-1 text-sm text-muted">
+                No serious medical term or number outside the senior’s note was found. This checks a fixed list of terms and every number, so it does not replace your own check.
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-muted">Not available: there is no transcription of the senior’s note to compare with.</p>
+            )}
+          </section>
+
           {sections.length ? (
             <dl className="divide-y divide-line overflow-hidden rounded-lg border border-line">
               {sections.map((s) => (
@@ -103,17 +146,26 @@ export function ApproveDialog({
   open,
   onOpenChange,
   onConfirm,
+  flags,
+  wordingConfirmed,
 }: {
   report: ReportItem | null;
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onConfirm: () => Promise<void>;
+  flags: WordingFlag[];
+  wordingConfirmed: boolean;
 }) {
   const [checked, setChecked] = useState(false);
+  const [wordingChecked, setWordingChecked] = useState(false);
+  const needsWording = flags.length > 0 && !wordingConfirmed;
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (open) setChecked(false);
+    if (open) {
+      setChecked(false);
+      setWordingChecked(false);
+    }
   }, [open]);
 
   if (!report) return null;
@@ -129,7 +181,7 @@ export function ApproveDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
       <DialogContent
-        size="sm"
+        size={flags.length > 0 ? 'md' : 'sm'}
         title="Approve and issue this report?"
         description="The PDF is generated now and the case becomes Finalized (read-only until reopened)."
         footer={
@@ -141,7 +193,7 @@ export function ApproveDialog({
             </DialogClose>
             <Button
               variant="primary"
-              disabled={!checked}
+              disabled={!checked || (needsWording && !wordingChecked)}
               loading={busy}
               onClick={async () => {
                 setBusy(true);
@@ -167,6 +219,26 @@ export function ApproveDialog({
               </div>
             ))}
           </dl>
+          {flags.length > 0 && (
+            <div className={cn('rounded-lg border px-3.5 py-3', needsWording ? 'border-warning/30 bg-warning-soft' : 'border-line bg-surface-2')}>
+              <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+                <TriangleAlert className={cn('h-4 w-4', needsWording ? 'text-warning' : 'text-muted')} aria-hidden />
+                {needsWording ? `Not in the senior’s note: ${new Set(flags.map((f) => f.term)).size} term${new Set(flags.map((f) => f.term)).size === 1 ? '' : 's'}` : 'You already confirmed these terms'}
+              </p>
+              <WordingList flags={flags} limit={6} className="mt-1.5" />
+              {needsWording && (
+                <label className="mt-2 flex cursor-pointer items-start gap-3 rounded-md px-1.5 py-1.5 hover:bg-warning/10">
+                  <input
+                    type="checkbox"
+                    checked={wordingChecked}
+                    onChange={(e) => setWordingChecked(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-line-strong accent-[rgb(var(--accent))]"
+                  />
+                  <span className="text-base leading-snug text-ink-2">I checked these with the senior: this is what the senior meant.</span>
+                </label>
+              )}
+            </div>
+          )}
           <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-line bg-surface-2 px-3.5 py-3 transition-colors hover:border-line-strong has-[:checked]:border-accent/40 has-[:checked]:bg-accent-soft">
             <input
               type="checkbox"

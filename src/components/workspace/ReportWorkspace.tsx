@@ -4,6 +4,7 @@ import { Toaster, toast } from 'sonner';
 import { Group, Panel, Separator, useDefaultLayout, usePanelRef, type LayoutStorage } from 'react-resizable-panels';
 import { Download, FileText, Image as ImageIcon, Menu as MenuIcon, PanelLeftOpen, RefreshCw, TriangleAlert } from 'lucide-react';
 import { hasReportBody, isLocked, type ReportItem, type ReportStatus } from '../../lib/report';
+import { checkWording, wordingSignature } from '../../lib/wording';
 import { cn } from '../../lib/cn';
 import { Button } from '../ui/button';
 import { ConfirmDialog, Dialog, IconButton, SheetContent, TooltipProvider } from '../ui/overlay';
@@ -17,7 +18,7 @@ import { NoteViewer } from './NoteViewer';
 import { BrandMark, QueueSidebar, type QueueView } from './QueueSidebar';
 import { ReportPane } from './ReportPane';
 import { SheetSkeleton } from './ReportSheet';
-import { useReports } from './useReports';
+import { useReports, type CaseAction } from './useReports';
 import { useTheme, type ThemeApi } from './useTheme';
 
 /** Per-viewer conveniences only (layout, sidebar); every read/write may throw in private modes. */
@@ -188,7 +189,7 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
   );
 
   const onAction = useCallback(
-    async (action: 'archive' | 'restore' | 'reopen' | 'dequeue') => {
+    async (action: CaseAction) => {
       if (!draft) return;
       if (action === 'archive') return archive(draft.id);
       const row = await api.act(draft.id, action);
@@ -265,6 +266,17 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
 
   /* ---------- layout ---------- */
 
+  // Drafts whose wording the resident still has to check; the list shows them as "Check wording".
+  const flaggedIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of reports) {
+      if (r.isArchived || r.status !== 'DRAFT') continue;
+      const found = checkWording(r);
+      if (found.length > 0 && r.wordingAck !== wordingSignature(found)) ids.add(r.id);
+    }
+    return ids;
+  }, [reports]);
+
   const sidebarProps = {
     reports: filtered,
     selectedId,
@@ -275,6 +287,7 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
     onQueryChange: setQuery,
     searchRef,
     counts: api.counts,
+    flaggedIds,
     engineOnline: api.engineOnline,
     engineBusy: api.engineBusy,
     onIngest: api.ingest,
@@ -285,6 +298,11 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
     theme,
     onShowShortcuts: () => setShortcutsOpen(true),
   };
+
+  // Wording check (H28): serious terms and numbers the senior's note does not contain. Live as the resident edits.
+  const flags = useMemo(() => (draft && draft.status === 'DRAFT' ? checkWording(draft) : []), [draft]);
+  const wordingConfirmed = flags.length > 0 && draft?.wordingAck === wordingSignature(flags);
+  const wordingPending = flags.length > 0 && !wordingConfirmed;
 
   const approve = draft ? approveState(draft) : { can: false, hint: '' };
   const readOnly = !draft || isLocked(draft.status) || !!draft.isArchived;
@@ -310,6 +328,8 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
       readOnly={readOnly}
       engineOnline={api.engineOnline}
       developing={develop.live && develop.id === draft.id}
+      flags={flags}
+      wordingConfirmed={wordingConfirmed}
       onPatch={api.update}
       onAi={() => void runAi(draft.id)}
       onDequeue={() => void onAction('dequeue')}
@@ -353,6 +373,7 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
         <CaseHeader
           report={draft}
           saveState={api.saveState}
+          wordingPending={wordingPending}
           onSaveNow={() => void api.save()}
           leading={leading}
           focusMode={focusMode}
@@ -443,14 +464,18 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
       <main className="flex min-w-0 flex-1 flex-col">{main}</main>
 
       <DropOverlay onFiles={api.ingest} />
-      <AuditDialog report={draft} open={auditOpen} onOpenChange={setAuditOpen} />
+      <AuditDialog report={draft} open={auditOpen} onOpenChange={setAuditOpen} flags={flags} wordingConfirmed={wordingConfirmed} />
       <ApproveDialog
         report={draft}
         open={approveOpen}
         onOpenChange={setApproveOpen}
+        flags={flags}
+        wordingConfirmed={wordingConfirmed}
         onConfirm={async () => {
           if (!draft) return;
           try {
+            // The server stores exactly the wording the resident confirmed; the PDF is refused without it.
+            if (wordingPending && !(await api.act(draft.id, 'ack_wording'))) return;
             const name = await api.downloadPdf(draft);
             setApproveOpen(false);
             toast.success('Report issued', { description: `${name} downloaded · case finalized` });

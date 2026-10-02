@@ -30,7 +30,8 @@ The draft is produced under AGENTS.md's source convention (nothing omitted, noth
 - Case states: Queued, Generating, Draft, Blocked (AI needs a clarification, AGENTS.md §6.4), Failed, Finalized; archiving is a separate flag.
 - The AI must never fabricate: unknown header variables stay empty and print as "Not stated in source"; only a human writes the urgent call log.
 - The resident's own corrections outrank the note (AGENTS.md §2) and are fed to the next AI run as "Notes for the AI".
-- No authentication yet; the server is meant for local/LAN use.
+- Wording check (AGENTS.md H28, `src/lib/wording.ts`): every serious medical term, certainty word, own-advice word and number in the red box, findings, impression and recommendations is compared with the AI's transcription of the senior's note (plus the owner's corrections). Anything the senior didn't write is flagged live (banner, ringed lines, "Check wording" chip, audit panel), and a draft with flagged wording cannot be issued as a PDF until the resident confirms exactly that wording (the server enforces it, and any edit that changes the flagged set voids the confirmation). Negated standard normal statements in the findings list are exempt; legacy cases and manual reports (no transcription) are not checked. It is a safety net for the resident's own check, not a replacement.
+- Access: HTTP Basic Auth on the production deployment (BASIC_AUTH_PASS); localhost stays open.
 
 ## Brand Commitments
 
@@ -46,6 +47,7 @@ The draft is produced under AGENTS.md's source convention (nothing omitted, noth
 ## Product Principles
 
 1. Fidelity over fluency: never show or print a fact the source does not contain.
+1a. The senior's words only (owner ruling, 2 Oct 2026, AGENTS.md H28): the report uses the senior's own diagnostic and descriptive terms. The AI never swaps in a synonym, a stronger or weaker term (a written "breach" is never "perforation"), an added label, cause or complication, or a certainty word the senior did not write, and it adds no recommendations of its own. It may expand abbreviations, fix spelling, and add only the fixed normal statements, the technique line and the fallback "Clinical correlation is advised."
 2. The resident verifies; the interface makes checking against the note fast and obvious.
 3. What you edit is what prints.
 4. Calm, legible, state-first: every case shows what it needs next.

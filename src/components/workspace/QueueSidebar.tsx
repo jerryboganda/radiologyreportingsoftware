@@ -40,6 +40,8 @@ interface QueueSidebarProps {
   onQueryChange: (query: string) => void;
   searchRef: RefObject<HTMLInputElement | null>;
   counts: { active: number; archived: number; failed: number };
+  /** Drafts whose wording contains terms the senior never wrote (and the resident has not confirmed). */
+  flaggedIds: ReadonlySet<string>;
   engineOnline: boolean;
   engineBusy: boolean;
   onIngest: (files: File[]) => Promise<void>;
@@ -140,6 +142,7 @@ export function QueueSidebar(props: QueueSidebarProps) {
               <CaseRow
                 key={r.id}
                 report={r}
+                flagged={props.flaggedIds.has(r.id)}
                 selected={r.id === selectedId}
                 onSelect={() => onSelect(r.id)}
                 onArchive={() => props.onArchive(r.id)}
@@ -163,12 +166,14 @@ export function QueueSidebar(props: QueueSidebarProps) {
 
 function CaseRow({
   report: r,
+  flagged,
   selected,
   onSelect,
   onArchive,
   onRestore,
 }: {
   report: ReportItem;
+  flagged: boolean;
   selected: boolean;
   onSelect: () => void;
   onArchive: () => void;
@@ -198,7 +203,7 @@ function CaseRow({
           <span className={cn('min-w-0 flex-1 truncate text-base font-semibold', selected ? 'text-brand-ink' : 'text-ink', !r.patientName.trim() && 'font-medium italic text-muted')}>
             {displayName(r)}
           </span>
-          <StatusChip status={r.status} archived={r.isArchived} />
+          <StatusChip status={r.status} archived={r.isArchived} flagged={flagged} />
         </span>
         <span className="flex w-full items-center gap-2 text-sm text-muted">
           {r.tokenNumber.trim() && <span className="shrink-0 font-semibold tabular-nums text-ink-2">#{r.tokenNumber}</span>}

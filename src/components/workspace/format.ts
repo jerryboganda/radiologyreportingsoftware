@@ -35,12 +35,8 @@ export function ageSex(r: Pick<ReportItem, 'age' | 'gender'>): string {
 
 export const fileName = (path: string) => decodeURIComponent(path.split(/[/\\]/).pop() || path);
 
-/** One entry per line without "1." / "- " markers — the same rule the print page uses. */
-export const toLines = (markdown: string) =>
-  markdown
-    .split('\n')
-    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').trim())
-    .filter(Boolean);
+/** One entry per line without "1." / "- " markers — the same rule the print page and the wording check use. */
+export { splitLines as toLines } from '../../lib/wording';
 
 export interface SheetSection {
   letter: string;

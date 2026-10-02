@@ -44,6 +44,7 @@ await client.execute(`
     is_archived INTEGER DEFAULT 0,
     last_error TEXT,
     owner_notes TEXT,
+    wording_ack TEXT,
     created_at INTEGER,
     updated_at INTEGER
   );
@@ -72,5 +73,8 @@ if (!columns.has('owner_notes')) {
     "UPDATE reports SET audit_status = 'LEGACY'",
   ], 'write');
 }
+
+// Which flagged wording (see lib/wording.ts) the resident confirmed before issuing; the PDF is refused until it matches.
+if (!columns.has('wording_ack')) await client.execute('ALTER TABLE reports ADD COLUMN wording_ack TEXT');
 
 export const db = drizzle(client, { schema });

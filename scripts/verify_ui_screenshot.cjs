@@ -50,7 +50,7 @@ const base = {
   technique: 'Contrast-enhanced CT of the abdomen and pelvis was performed with multiplanar reformations.',
   findingsJson: JSON.stringify(findings),
   findingsMarkdown: '',
-  impressionMarkdown: '1. Cholelithiasis without cholecystitis.\n2. Right mid-pole renal calculus measuring 5.4 mm without hydronephrosis.',
+  impressionMarkdown: '1. Gallbladder calculi, the largest 12 mm.\n2. Right mid-pole renal calculus measuring 5.4 mm.',
   recommendationsMarkdown: 'Clinical correlation is advised.',
   isUrgent: false,
   urgentFindings: null,
@@ -64,12 +64,39 @@ const base = {
   isArchived: false,
   lastError: null,
   ownerNotes: null,
+  wordingAck: null,
 };
 const blank = { ...base, tokenNumber: '', patientName: '', age: '', gender: '', mrNumber: null, modality: '', studyDate: '', referringClinician: null, clinicalHistory: null, comparison: null, technique: '', findingsJson: '[]', impressionMarkdown: '', recommendationsMarkdown: '', verbatimTranscription: null, verificationSheetMarkdown: null, auditStatus: 'PENDING' };
 
+const flaggedNote = 'Pt: Synthetic G, 60 Y / Male\nCBD stent migrated prox end, distal end in D2 with local mural air / breach (urgent).\nProx CBD 8.4 mm. Rest abd organs NAD.';
+const flagged = {
+  ...base,
+  id: 'syn-flagged',
+  patientName: 'Synthetic Patient G',
+  age: '60 Y',
+  gender: 'Male',
+  isUrgent: true,
+  urgentFindings: 'Common bile duct stent malposition, concerning for duodenal perforation.',
+  findingsJson: JSON.stringify([
+    {
+      title: 'Hepatobiliary System',
+      items: [
+        { structure: 'Biliary tree', content: 'A stent is in situ with its distal end in D2 and local mural air / breach. The proximal common bile duct measures 8.4 mm.', isAbnormal: true },
+        { structure: 'Pancreas', content: 'A solitary 9 mm hypodense mass is seen in the head.', isAbnormal: true },
+      ],
+    },
+  ]),
+  impressionMarkdown: '1. CBD stent migration with D2 mural breach.\n2. No evidence of distant metastasis.',
+  recommendationsMarkdown: 'Urgent communication of these findings to the referring team is advised.\nShort-interval follow-up MRI as clinically indicated.',
+  verbatimTranscription: flaggedNote,
+  createdAt: iso(1),
+  updatedAt: iso(1),
+};
+
 const CASES = {
+  flagged,
   draft: { ...base, id: 'syn-draft', createdAt: iso(5), updatedAt: iso(2) },
-  urgent: { ...base, id: 'syn-urgent', patientName: 'Synthetic Patient F', isUrgent: true, urgentFindings: 'Free intraperitoneal air in keeping with perforation.', createdAt: iso(4), updatedAt: iso(2) },
+  urgent: { ...base, id: 'syn-urgent', patientName: 'Synthetic Patient F', isUrgent: true, urgentFindings: 'Free air, perforation.', verbatimTranscription: 'GB - multiple calculi, largest 12 mm\nRt kidney mid pole calculus 5.4 mm, no HN\nFree air - perforation (urgent)', createdAt: iso(4), updatedAt: iso(2) },
   queued: { ...blank, id: 'syn-queued', status: 'QUEUED', createdAt: iso(3), updatedAt: iso(3) },
   processing: { ...blank, id: 'syn-processing', status: 'PROCESSING', createdAt: iso(2), updatedAt: iso(1) },
   blocked: {
@@ -88,7 +115,8 @@ const CASES = {
   finalized: { ...base, id: 'syn-final', patientName: 'Synthetic Patient D', status: 'FINALIZED', createdAt: iso(8), updatedAt: iso(1) },
   archived: { ...base, id: 'syn-arch', patientName: 'Synthetic Patient E', isArchived: true, createdAt: iso(9), updatedAt: iso(9) },
 };
-const listWith = (first) => [CASES[first], ...Object.entries(CASES).filter(([k]) => k !== first).map(([, v]) => v)];
+// The flagged cases only appear in the lists of the wording scenarios, so every other screen proves a clean draft shows no warning.
+const listWith = (first) => [CASES[first], ...Object.entries(CASES).filter(([k]) => k !== first && !k.startsWith('flagged')).map(([, v]) => v)];
 
 /* ---------- scenarios ---------- */
 
@@ -115,6 +143,12 @@ const scenarios = [
   { name: 'phone-390-dark-note', w: 390, h: 844, scheme: 'dark', list: listWith('draft'), online: true, touch: true, step: 'note' },
   { name: 'phone-390-drawer', w: 390, h: 844, scheme: 'light', list: listWith('draft'), online: true, touch: true, step: 'drawer' },
   { name: 'phone-390-empty', w: 390, h: 844, scheme: 'light', list: [], online: false, touch: true },
+  // Wording check: terms the senior never wrote
+  { name: 'wording-1366-light', w: 1366, h: 768, scheme: 'light', list: listWith('flagged'), online: true, flagged: true },
+  { name: 'wording-1920-dark', w: 1920, h: 1080, scheme: 'dark', list: listWith('flagged'), online: true, flagged: true },
+  { name: 'wording-audit-1366-light', w: 1366, h: 768, scheme: 'light', list: listWith('flagged'), online: true, flagged: true, step: 'audit' },
+  { name: 'wording-approve-1366-light', w: 1366, h: 768, scheme: 'light', list: listWith('flagged'), online: true, flagged: true, step: 'approve' },
+  { name: 'wording-phone-390-light', w: 390, h: 844, scheme: 'light', list: listWith('flagged'), online: true, flagged: true, touch: true },
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -122,6 +156,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function run() {
   if (!CHROME) throw new Error('No Chrome/Chromium found (set CHROME_PATH)');
   fs.mkdirSync(OUT, { recursive: true });
+  try {
+    const w = await import('../src/lib/wording.ts');
+    CASES.flaggedConfirmed = { ...flagged, id: 'syn-flagged-ok', wordingAck: w.wordingSignature(w.checkWording({ ...flagged, auditStatus: 'PASS' })) };
+    scenarios.push({ name: 'wording-confirmed-1366-light', w: 1366, h: 768, scheme: 'light', list: listWith('flaggedConfirmed'), online: true, confirmed: true });
+  } catch (e) {
+    console.log('(skipping the confirmed-wording scenario: could not load src/lib/wording.ts: ' + e.message + ')');
+  }
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--hide-scrollbars'] });
   const failures = [];
 
@@ -164,7 +205,17 @@ async function run() {
       const controls = [...document.querySelectorAll('header button, header a, [role="group"] button, nav button')].filter(visible);
       const clipped = controls.filter((el) => el.scrollWidth > el.clientWidth + 1 || el.getBoundingClientRect().height > 46).map((el) => el.getAttribute('aria-label') || el.textContent.trim().slice(0, 30));
       const unnamed = [...document.querySelectorAll('button, a[href]')].filter((el) => visible(el) && !el.textContent.trim() && !el.getAttribute('aria-label')).map((el) => el.outerHTML.slice(0, 80));
-      return { overflowX: document.documentElement.scrollWidth - window.innerWidth, clipped, unnamed };
+      const text = document.body.innerText;
+      return {
+        overflowX: document.documentElement.scrollWidth - window.innerWidth,
+        clipped,
+        unnamed,
+        alerts: document.querySelectorAll('[role="alert"]').length,
+        ringed: document.querySelectorAll('[data-flag-key].ring-warning').length,
+        chip: text.includes('Check wording'),
+        confirmedNote: text.includes('You confirmed'),
+        approveBox: !!document.querySelector('[role="dialog"]')?.innerText.includes('I checked these with the senior'),
+      };
     });
 
     await page.screenshot({ path: path.join(OUT, `${s.name}.png`) });
@@ -173,6 +224,12 @@ async function run() {
       m.clipped.length && `clipped controls: ${m.clipped.join(', ')}`,
       m.unnamed.length && `unnamed controls: ${m.unnamed.join(' | ')}`,
       errors.length && `errors: ${errors.join(' | ').slice(0, 300)}`,
+      m.alerts !== (s.flagged ? 1 : 0) && `wording banner: expected ${s.flagged ? 1 : 0} alert(s), found ${m.alerts}`,
+      s.flagged && s.step !== 'audit' && s.step !== 'approve' && m.ringed === 0 && 'no flagged line is ringed in the report',
+      m.chip !== !!s.flagged && (s.flagged ? 'no "Check wording" chip' : 'a "Check wording" chip on a draft that has no flags'),
+      s.confirmed && !m.confirmedNote && 'confirmed wording is not acknowledged on screen',
+      s.confirmed && m.ringed > 0 && 'confirmed wording is still ringed',
+      s.step === 'approve' && s.flagged && !m.approveBox && 'the approve dialog has no wording confirmation',
     ].filter(Boolean);
     console.log(`${problems.length ? '✗' : '✓'} ${s.name}${problems.length ? ' — ' + problems.join('; ') : ''}`);
     if (problems.length) failures.push(s.name);

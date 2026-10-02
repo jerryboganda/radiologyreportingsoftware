@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { motion } from 'motion/react';
 import {
   BadgeCheck,
@@ -17,11 +17,13 @@ import {
   WifiOff,
 } from 'lucide-react';
 import { isBlankDraft, type ReportItem, type ReportPatch } from '../../lib/report';
+import type { WordingFlag } from '../../lib/wording';
 import { cn } from '../../lib/cn';
 import { AutoTextarea } from '../ui/auto-textarea';
 import { Button } from '../ui/button';
 import { clarifications, elapsed, longDate } from './format';
 import { ReportSheet, SECTION_IDS, SheetSkeleton, type SectionId } from './ReportSheet';
+import { WordingList } from './WordingList';
 
 const SECTION_LABELS: Record<SectionId, string> = { patient: 'Patient', technique: 'Technique', findings: 'Findings', impression: 'Impression' };
 
@@ -35,15 +37,21 @@ interface ReportPaneProps {
   onDequeue: () => void;
   onReopen: () => void;
   onDownload: () => void;
+  /** Serious terms/numbers in the report that the senior's note does not contain (lib/wording.ts). */
+  flags: WordingFlag[];
+  /** The resident already confirmed exactly these terms. */
+  wordingConfirmed: boolean;
 }
 
 /** Right-hand pane: section navigation, the state banner, the report sheet and the (unprinted) notes for the AI. */
-export function ReportPane({ report: r, readOnly, engineOnline, developing, onPatch, onAi, onDequeue, onReopen, onDownload }: ReportPaneProps) {
+export function ReportPane({ report: r, readOnly, engineOnline, developing, onPatch, onAi, onDequeue, onReopen, onDownload, flags, wordingConfirmed }: ReportPaneProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const [active, setActive] = useState<SectionId>('patient');
   const waiting = r.status === 'QUEUED' || r.status === 'PROCESSING';
   const showSkeleton = waiting && isBlankDraft(r);
+  const wordingPending = flags.length > 0 && !wordingConfirmed;
+  const flaggedKeys = useMemo(() => new Set(wordingPending ? flags.map((f) => f.key) : []), [flags, wordingPending]);
 
   // Scroll-spy over the sheet's sections.
   useEffect(() => {
@@ -71,6 +79,11 @@ export function ReportPane({ report: r, readOnly, engineOnline, developing, onPa
   const jump = (id: SectionId) => {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     scroller.current?.querySelector(`#${id}`)?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  };
+
+  const jumpToFlag = (flag: WordingFlag) => {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    scroller.current?.querySelector(`[data-flag-key="${flag.key}"]`)?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
   };
 
   const notesVisible = !waiting && r.status !== 'FINALIZED' ? true : Boolean(r.ownerNotes?.trim());
@@ -135,8 +148,10 @@ export function ReportPane({ report: r, readOnly, engineOnline, developing, onPa
           }}
         />
 
+        {!showSkeleton && flags.length > 0 && <WordingBanner flags={flags} confirmed={wordingConfirmed} onSelect={jumpToFlag} />}
+
         <div key={`${r.id}`} className="animate-in fade-in-0 duration-200">
-          {showSkeleton ? <SheetSkeleton /> : <ReportSheet report={r} readOnly={readOnly} onPatch={onPatch} developing={developing} />}
+          {showSkeleton ? <SheetSkeleton /> : <ReportSheet report={r} readOnly={readOnly} onPatch={onPatch} developing={developing} flaggedKeys={flaggedKeys} />}
         </div>
 
         {notesVisible && (
@@ -159,6 +174,38 @@ export function ReportPane({ report: r, readOnly, engineOnline, developing, onPa
             />
           </section>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Wording check: terms the senior never wrote ---------- */
+
+function WordingBanner({ flags, confirmed, onSelect }: { flags: WordingFlag[]; confirmed: boolean; onSelect: (flag: WordingFlag) => void }) {
+  const terms = new Set(flags.map((f) => f.term)).size;
+  return (
+    <div
+      role={confirmed ? 'status' : 'alert'}
+      className={cn(
+        'mx-auto mb-4 w-full max-w-[52rem] rounded-lg border px-4 py-3',
+        confirmed ? 'border-line bg-surface text-ink-2' : 'border-warning/30 bg-warning-soft text-ink-2',
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <TriangleAlert className={cn('mt-0.5 h-[18px] w-[18px] shrink-0', confirmed ? 'text-muted' : 'text-warning')} aria-hidden />
+        <div className="min-w-0 flex-1">
+          <p className="text-base font-semibold text-ink">
+            {confirmed
+              ? `You confirmed ${terms} term${terms === 1 ? '' : 's'} that the senior’s note does not contain`
+              : `Check the wording: ${terms} term${terms === 1 ? '' : 's'} not in the senior’s note`}
+          </p>
+          {!confirmed && (
+            <p className="mt-0.5 text-sm leading-relaxed">
+              The AI used words or numbers the senior didn’t write. Replace them with the senior’s own words, or confirm them with the senior when you approve. Click one to jump to it.
+            </p>
+          )}
+          <WordingList flags={flags} onSelect={onSelect} className="mt-2" />
+        </div>
       </div>
     </div>
   );
