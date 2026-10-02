@@ -27,7 +27,10 @@ const MODEL = 'gemini-3.8-flash-high'; // owner rule: always Gemini 3.8 Flash, H
 // A full report on Gemini 3.8 Flash (High) took 290 s in the first real run; the app reclaims a stuck case after 15 min.
 const JOB_TIMEOUT_MS = 10 * 60 * 1000;
 const UPLOADS_DIR = path.resolve(process.env.UPLOADS_DIR || path.join(ROOT, 'uploads'));
-const WORK_DIR = path.join(ROOT, '.worker'); // inside the project root, so agy's paths never contain spaces
+// Scratch folder inside the project root (so agy's paths never contain spaces). A local and a production worker can run
+// side by side on one PC, so a remote app gets its own folder and they never overwrite each other's files.
+const WORK_REL = APP_IS_LOCAL ? '.worker' : '.worker-prod';
+const WORK_DIR = path.join(ROOT, WORK_REL);
 const ENVELOPE_KEYS = ['response', 'result', 'text', 'output', 'content'];
 
 let job = null; // { id, child } while a case is being processed
@@ -116,7 +119,7 @@ You are running inside the reporting app's automated pipeline, not a chat. The r
 // `--json-schema <file>` returns the checked object in `structured_output`.
 function agyArgs(imageRel) {
   return [
-    '-p', `Follow the instructions in @.worker/prompt.md exactly. The handwritten note image is @${imageRel}. Output only the JSON object.`,
+    '-p', `Follow the instructions in @${WORK_REL}/prompt.md exactly. The handwritten note image is @${imageRel}. Output only the JSON object.`,
     '--model', MODEL,
     '--output-format', 'json',
     '--json-schema', 'scripts/report.schema.json',
@@ -232,7 +235,7 @@ async function runJob(report) {
   try {
     const image = APP_IS_LOCAL ? resolveImage(report.imagePath) : await downloadImage(report.imagePath);
     if (!image) throw new Error('Source image missing');
-    const imageRel = `.worker/current${path.extname(image).toLowerCase()}`;
+    const imageRel = `${WORK_REL}/current${path.extname(image).toLowerCase()}`;
     fs.copyFileSync(image, path.join(ROOT, imageRel));
     fs.writeFileSync(path.join(WORK_DIR, 'prompt.md'), buildPrompt(report, imageRel));
     const output = AGY_FAKE_RESULT ? fs.readFileSync(AGY_FAKE_RESULT, 'utf8') : await runAgy(imageRel);

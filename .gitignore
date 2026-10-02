@@ -34,3 +34,5 @@ worker*.log
 
 # Machine-specific launchers that hold the production password
 start-worker-production.cmd
+
+.worker-prod/
