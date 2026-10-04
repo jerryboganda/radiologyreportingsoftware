@@ -241,6 +241,17 @@ function agyArgs(imageRel, model, variant = '') {
 }
 
 /** `killTree`/`runCapture`/`runCli` only ever serve the Antigravity CLI now. */
+/** Rejects if the promise is still pending after ms — independent of AbortSignal, which a stalled fetch can ignore. */
+function withTimeout(promise, ms, message) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 function killTree(child) {
   if (!child.pid) return;
   if (process.platform === 'win32') spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true });
@@ -338,6 +349,34 @@ export function parseResult(output) {
     throw new Error(`CLI output held no JSON object: ${output.trim().slice(0, 300)}`);
   }
   return value;
+}
+
+/**
+ * Coerces a model's JSON into the app's WorkerResult shape (src/lib/report.ts validateWorkerResult).
+ * The agy CLI schema-checked its output; gateway models have no such guard and drift (null instead
+ * of "", numbers for ages), so the worker normalizes defensively and lets the app catch the rest.
+ */
+function sanitizeResult(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const r = { ...value };
+  const str = (v) => (v == null ? '' : typeof v === 'string' ? v : String(v));
+  for (const key of ['patientName', 'age', 'gender', 'tokenNumber', 'mrNumber', 'modality', 'studyDate', 'referringClinician', 'clinicalHistory', 'comparison', 'technique', 'urgentFindings', 'verbatimTranscription', 'verificationSheet']) {
+    r[key] = str(r[key]);
+  }
+  r.status = String(r.status ?? '').trim().toUpperCase() === 'BLOCKED' ? 'BLOCKED' : 'READY';
+  r.isUrgent = r.isUrgent === true || r.isUrgent === 'true';
+  r.findings = (Array.isArray(r.findings) ? r.findings : [])
+    .filter((s) => s && typeof s === 'object' && !Array.isArray(s))
+    .map((s) => ({
+      title: str(s.title),
+      items: (Array.isArray(s.items) ? s.items : [])
+        .filter((i) => i && typeof i === 'object' && !Array.isArray(i))
+        .map((i) => ({ structure: str(i.structure), content: str(i.content), isAbnormal: i.isAbnormal === true || i.isAbnormal === 'true' })),
+    }));
+  for (const key of ['impression', 'recommendations']) {
+    r[key] = (Array.isArray(r[key]) ? r[key] : []).map(str);
+  }
+  return r;
 }
 
 function cleanWorkDir() {
@@ -469,11 +508,12 @@ async function runJob(report) {
     } else if (engine === 'opencode') {
       const mime = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }[path.extname(image).toLowerCase()];
       if (!mime) throw new Error(`unsupported note photo type: ${path.extname(image)}`);
-      output = await gatewayText(model, prompt, { mime, base64: fs.readFileSync(image).toString('base64') }, JOB_TIMEOUT_MS);
+      const call = gatewayText(model, prompt, { mime, base64: fs.readFileSync(image).toString('base64') }, JOB_TIMEOUT_MS);
+      output = await withTimeout(call, JOB_TIMEOUT_MS + 30_000, `opencode gateway stalled past ${JOB_TIMEOUT_MS / 60_000} min`);
     } else {
       output = await runCli(imageRel, null, agyArgs, engine, model, variant);
     }
-    const result = parseResult(output);
+    const result = sanitizeResult(parseResult(output));
     const saved = await post({ action: 'complete', reportId: report.id, result });
     log(`${tag}: ${saved.status} in ${Math.round((Date.now() - started) / 1000)} s`);
   } catch (err) {

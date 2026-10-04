@@ -10,6 +10,7 @@ import {
   type Radiologist,
 } from '../../lib/institution';
 import type { WordingFlag } from '../../lib/wording';
+import { ENGINE_DEFAULT_LABEL, aiCopy } from '../../lib/aiModel';
 import { cn } from '../../lib/cn';
 import { Button, Kbd } from '../ui/button';
 import { Dialog, DialogClose, DialogContent, IconButton, PanelContent } from '../ui/overlay';
@@ -18,7 +19,7 @@ import { WordingList } from './WordingList';
 
 /* ---------- Audit sheet ---------- */
 
-function auditVerdict(r: ReportItem, sheetStatus: string | null, flags: WordingFlag[], wordingConfirmed: boolean) {
+function auditVerdict(r: ReportItem, sheetStatus: string | null, flags: WordingFlag[], wordingConfirmed: boolean, aiLabel: string) {
   if (flags.length > 0 && !wordingConfirmed) {
     const terms = new Set(flags.map((f) => f.term)).size;
     return { tone: 'warning', icon: <TriangleAlert />, label: `Check wording · ${terms} term${terms === 1 ? '' : 's'}`, note: 'The AI’s own audit may say PASS, but these terms are not in the senior’s note.' } as const;
@@ -33,7 +34,7 @@ function auditVerdict(r: ReportItem, sheetStatus: string | null, flags: WordingF
     return { tone: 'warning', icon: <MessageCircleQuestion />, label: 'Blocked · clarification needed', note: 'The AI stopped instead of guessing (AGENTS.md §6.4).' } as const;
   }
   if (r.auditStatus === 'PASS') {
-    return { tone: 'success', icon: <BadgeCheck />, label: 'AI self-audit passed', note: 'Gemini 3.8 Flash ran the AGENTS.md §10 final audit. You still verify before signing.' } as const;
+    return { tone: 'success', icon: <BadgeCheck />, label: 'AI self-audit passed', note: aiCopy(aiLabel).named.auditNote } as const;
   }
   return { tone: 'info', icon: <CircleDashed />, label: 'Pending', note: 'Waiting for the AI to draft and audit this case.' } as const;
 }
@@ -51,17 +52,20 @@ export function AuditDialog({
   onOpenChange,
   flags,
   wordingConfirmed,
+  aiLabel,
 }: {
   report: ReportItem | null;
   open: boolean;
   onOpenChange: (o: boolean) => void;
   flags: WordingFlag[];
   wordingConfirmed: boolean;
+  /** The model actually running, named on the audit verdict. */
+  aiLabel: string;
 }) {
   if (!report) return null;
   const hasReference = report.auditStatus !== 'LEGACY' && (report.verbatimTranscription?.trim().length ?? 0) >= 15;
   const { status, sections, preamble } = parseSheet(report.verificationSheetMarkdown);
-  const verdict = auditVerdict(report, status, flags, wordingConfirmed);
+  const verdict = auditVerdict(report, status, flags, wordingConfirmed, aiLabel);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
@@ -379,7 +383,7 @@ export function SettingsDialog({
   };
 
   const modelOptions = useMemo(() => {
-    const opts = engine === 'antigravity' ? ['gemini-3.8-flash-high'] : workerModels;
+    const opts = engine === 'antigravity' ? [ENGINE_DEFAULT_LABEL.antigravity] : workerModels;
     return model && !opts.includes(model) ? [...opts, model] : [...opts];
   }, [engine, workerModels, model]);
 
