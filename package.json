@@ -8,11 +8,13 @@
     "build": "astro build",
     "preview": "astro preview",
     "check": "tsc --noEmit",
-    "worker": "node scripts/antigravity_queue_worker.mjs",
+    "worker": "node scripts/queue_worker.mjs",
     "check:api": "node scripts/api-check.mjs",
     "check:wording": "node scripts/wording-check.test.mjs",
     "check:auth": "node scripts/auth-check.mjs",
-    "check:ui": "node scripts/verify_ui_screenshot.cjs"
+    "check:ui": "node scripts/verify_ui_screenshot.cjs",
+    "worker:antigravity": "node scripts/queue_worker.mjs --engine=antigravity",
+    "worker:opencode": "node scripts/queue_worker.mjs --engine=opencode"
   },
   "dependencies": {
     "@astrojs/node": "^9.0.0",

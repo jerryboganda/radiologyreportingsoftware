@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { BadgeCheck, CircleDashed, Download, History, MessageCircleQuestion, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { toast } from 'sonner';
 import type { ReportItem } from '../../lib/report';
 import type { WordingFlag } from '../../lib/wording';
 import { cn } from '../../lib/cn';
@@ -267,6 +268,123 @@ const SHORTCUTS: [string[], string][] = [
   [['?'], 'Show this list'],
   [['Esc'], 'Close a dialog'],
 ];
+
+/* ---------- AI settings ---------- */
+
+const ENGINE_OPTIONS = [
+  { value: 'antigravity', label: 'Antigravity (agy CLI)' },
+  { value: 'opencode', label: 'OpenCode CLI' },
+] as const;
+
+export function SettingsDialog({
+  open,
+  onOpenChange,
+  workerModels,
+  workerEngine,
+  workerModel,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  workerModels: string[];
+  workerEngine: string | null;
+  workerModel: string | null;
+}) {
+  const [engine, setEngine] = useState('antigravity');
+  const [model, setModel] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetch('/api/settings')
+      .then((r) => r.json())
+      .then((s) => {
+        if (cancelled) return;
+        setEngine(typeof s.engine === 'string' ? s.engine : 'antigravity');
+        setModel(typeof s.model === 'string' ? s.model : '');
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ engine, model: model.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not save settings');
+      toast.success('AI settings saved', { description: `${engine} · ${model.trim()}. The worker picks it up on the next case.` });
+      onOpenChange(false);
+    } catch (error) {
+      toast.error('Could not save settings', { description: (error as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        size="sm"
+        title="AI engine settings"
+        description="Which CLI drafts the reports, and which model it runs."
+        footer={
+          <>
+            <DialogClose asChild>
+              <Button variant="ghost">Cancel</Button>
+            </DialogClose>
+            <Button onClick={save} loading={busy}>
+              Save
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 px-5 py-4">
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium text-ink">Engine</span>
+            <select
+              value={engine}
+              onChange={(e) => setEngine(e.target.value)}
+              className="h-10 w-full rounded-md border border-line bg-surface px-3 text-base text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            >
+              {ENGINE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium text-ink">Model</span>
+            <input
+              list="worker-models"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder="e.g. gemini-3.8-flash-high"
+              className="h-10 w-full rounded-md border border-line bg-surface px-3 text-base text-ink placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            />
+            <datalist id="worker-models">
+              {workerModels.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
+            <p className="text-xs text-muted">
+              {workerEngine
+                ? `Worker currently runs ${workerEngine} · ${workerModel ?? 'unknown'}. The list below is what ${workerEngine === 'opencode' ? 'OpenCode' : 'the worker'} reported.`
+                : 'Start the worker to fill in the available models.'}
+            </p>
+          </label>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   return (

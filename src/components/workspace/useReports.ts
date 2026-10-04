@@ -44,7 +44,13 @@ export function useReports() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ReportItem | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
-  const [engine, setEngine] = useState<{ lastSeen: number | null; busy: boolean }>({ lastSeen: null, busy: false });
+  const [engine, setEngine] = useState<{ lastSeen: number | null; busy: boolean; engine: string | null; model: string | null; models: string[] }>({
+    lastSeen: null,
+    busy: false,
+    engine: null,
+    model: null,
+    models: [],
+  });
 
   // Refs mirror state for async work (poll, debounced save) so callbacks never act on stale values.
   const reportsRef = useRef<ReportItem[]>([]);
@@ -91,13 +97,13 @@ export function useReports() {
     try {
       const [list, queue] = await Promise.all([
         api<ReportItem[]>('/api/reports'),
-        api<{ workerLastSeen: number | null; workerBusy: boolean }>('/api/queue').catch(() => null),
+        api<{ workerLastSeen: number | null; workerBusy: boolean; workerEngine: string | null; workerModel: string | null; workerModels: string[] }>('/api/queue').catch(() => null),
       ]);
       reportsRef.current = list;
       setReports(list);
       setLoaded(true);
       setLoadError(null);
-      if (queue) setEngine({ lastSeen: queue.workerLastSeen, busy: queue.workerBusy });
+      if (queue) setEngine({ lastSeen: queue.workerLastSeen, busy: queue.workerBusy, engine: queue.workerEngine, model: queue.workerModel, models: queue.workerModels ?? [] });
       const current = list.find((r) => r.id === selectedRef.current);
       if (current) adopt(current);
     } catch (error) {
@@ -384,6 +390,9 @@ export function useReports() {
     saveState,
     engineOnline,
     engineBusy: engine.busy,
+    engineEngine: engine.engine,
+    engineModel: engine.model,
+    engineModels: engine.models,
     counts,
     refresh,
     select,

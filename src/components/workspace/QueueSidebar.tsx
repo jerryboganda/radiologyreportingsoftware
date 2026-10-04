@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent, type ReactNode, type RefObject } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Archive, ArchiveRestore, Camera, FolderSync, Inbox, Keyboard, Monitor, Moon, PanelLeftClose, RotateCcw, Search, Sun, Upload, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Camera, FolderSync, Inbox, Keyboard, Monitor, Moon, PanelLeftClose, RotateCcw, Search, Settings, Sun, Upload, X } from 'lucide-react';
 import type { ReportItem } from '../../lib/report';
 import { cn } from '../../lib/cn';
 import { Button, Kbd } from '../ui/button';
@@ -44,6 +44,8 @@ interface QueueSidebarProps {
   flaggedIds: ReadonlySet<string>;
   engineOnline: boolean;
   engineBusy: boolean;
+  engineModel: string | null;
+  onOpenSettings: () => void;
   onIngest: (files: File[]) => Promise<void>;
   onSyncInput: () => Promise<void>;
   onRetryFailed: () => Promise<void>;
@@ -84,7 +86,7 @@ export function QueueSidebar(props: QueueSidebarProps) {
             </BusyButton>
           )}
         </div>
-        <EngineStatus online={props.engineOnline} busy={props.engineBusy} />
+        <EngineStatus online={props.engineOnline} busy={props.engineBusy} model={props.engineModel} onOpenSettings={props.onOpenSettings} />
       </div>
 
       <div className="space-y-2.5 px-3 pb-1 pt-3">
@@ -342,21 +344,24 @@ function BusyButton({
   return tooltip ? <Tooltip content={tooltip}>{button}</Tooltip> : button;
 }
 
-function EngineStatus({ online, busy }: { online: boolean; busy: boolean }) {
+function EngineStatus({ online, busy, model, onOpenSettings }: { online: boolean; busy: boolean; model: string | null; onOpenSettings: () => void }) {
   return (
     <Tooltip
       side="right"
-      content={online ? 'The Antigravity worker is connected and processing the queue one case at a time.' : 'Start it on the reporting PC with: npm run worker'}
+      content={online ? 'The AI worker is connected and processing the queue one case at a time.' : 'Start it on the reporting PC with: npm run worker'}
     >
       <div className="flex items-center gap-2 px-0.5 text-xs text-muted" role="status">
         <span className="relative flex h-2 w-2" aria-hidden>
           {online && busy && <span className="absolute inset-0 rounded-full bg-success/60 motion-safe:animate-ping" />}
           <span className={cn('relative h-2 w-2 rounded-full', online ? 'bg-success' : 'bg-faint')} />
         </span>
-        <span className="truncate">
+        <span className="min-w-0 flex-1 truncate">
           {online ? (busy ? 'AI engine working' : 'AI engine online') : 'AI engine offline'}
-          <span className="text-faint"> · Gemini 3.8 Flash</span>
+          <span className="text-faint"> · {model ?? 'not set'}</span>
         </span>
+        <IconButton label="AI settings" size="icon-sm" variant="ghost" onClick={onOpenSettings} className="-my-1">
+          <Settings className="h-3.5 w-3.5" />
+        </IconButton>
       </div>
     </Tooltip>
   );

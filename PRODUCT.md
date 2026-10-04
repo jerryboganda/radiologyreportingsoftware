@@ -21,7 +21,7 @@ The draft is produced under AGENTS.md's source convention (nothing omitted, noth
 ## Operating Context
 
 - Notes arrive as phone photos (WhatsApp/CamScanner), via drag-and-drop, the camera, or the `input/` folder sync.
-- AI drafting runs through the owner's Antigravity CLI (`agy`) on Gemini 3.8 Flash (High) via a host-side worker (`npm run worker`); no paid API. When the engine is offline, cases wait in the queue or are written manually.
+- AI drafting runs through the owner's CLI subscription on the reporting PC via a host-side worker (`npm run worker`): Antigravity (`agy`, Gemini 3.8 Flash High) or OpenCode (`opencode`, any vision-capable model); engine and model are chosen in the app Settings. When the engine is offline, cases wait in the queue or are written manually.
 - Output is the locked A4 PDF (`src/pages/print/[id].astro`) with the department letterhead and crests.
 - Reading rooms are dim; wards and offices are bright.
 

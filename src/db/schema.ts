@@ -1,5 +1,10 @@
 import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
 
+export const settings = sqliteTable('settings', {
+  key: text('key').primaryKey(),
+  value: text('value'),
+});
+
 export const reports = sqliteTable('reports', {
   id: text('id').primaryKey(),
   tokenNumber: text('token_number').notNull(),

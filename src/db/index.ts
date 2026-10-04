@@ -56,6 +56,14 @@ try {
   // column already exists
 }
 
+// Worker engine/model selection edited from the app's Settings dialog.
+await client.execute(`
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  );
+`);
+
 // One-time upgrade of pre-2026-10 databases (recognised by the missing owner_notes column).
 const columns = new Set((await client.execute('PRAGMA table_info(reports)')).rows.map((c) => String(c.name)));
 if (!columns.has('owner_notes')) {

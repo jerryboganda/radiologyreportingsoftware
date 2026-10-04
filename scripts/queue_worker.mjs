@@ -1,39 +1,50 @@
-// AI worker: claims queued cases from the app, has the Antigravity CLI (agy) read each note photo under the
-// live AGENTS.md, and posts the structured result back. One job at a time, no automatic retries.
+// AI worker: claims queued cases from the app, has the selected AI CLI (Antigravity `agy`
+// or OpenCode) read each note photo under the live AGENTS.md, and posts the structured
+// result back. One job at a time, no automatic retries.
 // Runs on the Windows host (`npm run worker`); Node built-ins only.
 //   APP_URL          app base URL (default http://localhost:4321)
 //   APP_BASIC_AUTH   "user:password" when the app sits behind the password gate (production)
 //                    A remote APP_URL also makes the worker download each note photo over HTTPS instead of reading uploads/.
+//   AI_ENGINE        antigravity | opencode (default: the app's Settings, else antigravity)
+//   AI_MODEL         model id (default: the app's Settings, else the engine default)
 //   AGY_BIN          agy executable (default %LOCALAPPDATA%\agy\bin\agy.exe)
+//   OPENCODE_BIN     opencode executable (default: found on PATH)
 //   UPLOADS_DIR      where /uploads/<name> lives (default <root>/uploads)
-//   AGY_FAKE_RESULT  test seam: a JSON file used as agy's output instead of running agy
+//   AGY_FAKE_RESULT / OPENCODE_FAKE_RESULT  test seams: use this file as the CLI output
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const APP_URL = (process.env.APP_URL || 'http://localhost:4321').replace(/\/+$/, '');
+const APP_URL = (process.env.APP_URL || 'http://localhost:4321').trim().replace(/\/+$/, '');
 // The installer has shipped agy.exe, an agy.cmd shim and an extensionless binary at different times.
 const AGY_DIR = path.join(process.env.LOCALAPPDATA || '', 'agy', 'bin');
-const AGY_BIN = process.env.AGY_BIN || ['agy.exe', 'agy.cmd', 'agy'].map((f) => path.join(AGY_DIR, f)).find((p) => fs.existsSync(p)) || path.join(AGY_DIR, 'agy.exe');
-const AGY_FAKE_RESULT = process.env.AGY_FAKE_RESULT;
+const AGY_BIN = (process.env.AGY_BIN || ['agy.exe', 'agy.cmd', 'agy'].map((f) => path.join(AGY_DIR, f)).find((p) => fs.existsSync(p)) || path.join(AGY_DIR, 'agy.exe')).trim();
+const AGY_FAKE_RESULT = process.env.AGY_FAKE_RESULT?.trim();
+const OPENCODE_FAKE_RESULT = process.env.OPENCODE_FAKE_RESULT?.trim();
 // A password-protected app (production): APP_BASIC_AUTH="user:password".
 const AUTH_HEADER = process.env.APP_BASIC_AUTH ? { Authorization: `Basic ${Buffer.from(process.env.APP_BASIC_AUTH).toString('base64')}` } : {};
 // Only a worker on the same PC as the app may read note photos from the local uploads folder; a remote app's photos are downloaded.
 const APP_IS_LOCAL = ['localhost', '127.0.0.1', '[::1]'].includes(new URL(APP_URL).hostname);
-const MODEL = 'gemini-3.8-flash-high'; // owner rule: always Gemini 3.8 Flash, High thinking. Deliberately not configurable.
-// A full report on Gemini 3.8 Flash (High) took 290 s in the first real run; the app reclaims a stuck case after 15 min.
+const ENGINE_DEFAULT_MODEL = {
+  antigravity: 'gemini-3.8-flash-high', // owner rule: Antigravity always runs Gemini 3.8 Flash, High thinking.
+  opencode: 'opencode-go/deepseek-v4-flash-vision-exp',
+};
+const ALL_ENGINES = Object.keys(ENGINE_DEFAULT_MODEL);
 const JOB_TIMEOUT_MS = 10 * 60 * 1000;
 const UPLOADS_DIR = path.resolve(process.env.UPLOADS_DIR || path.join(ROOT, 'uploads'));
-// Scratch folder inside the project root (so agy's paths never contain spaces). A local and a production worker can run
+// Scratch folder inside the project root (so CLI paths never contain spaces). A local and a production worker can run
 // side by side on one PC, so a remote app gets its own folder and they never overwrite each other's files.
 const WORK_REL = APP_IS_LOCAL ? '.worker' : '.worker-prod';
 const WORK_DIR = path.join(ROOT, WORK_REL);
 const ENVELOPE_KEYS = ['response', 'result', 'text', 'output', 'content'];
 
 let job = null; // { id, child } while a case is being processed
+let currentEngine = null;
+let currentModel = null;
+let opencodeModelsCache = null;
 
 const log = (msg) => console.log(`${new Date().toLocaleTimeString()} [worker] ${msg}`);
 
@@ -47,6 +58,31 @@ async function post(body) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`${body.action}: HTTP ${res.status} ${JSON.stringify(data.errors ?? data.error ?? data)}`);
   return data;
+}
+
+/** The app's Settings (engine + model), or null when unreachable. */
+async function readSettings() {
+  try {
+    const res = await fetch(`${APP_URL}/api/settings`, { headers: AUTH_HEADER, signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data && typeof data.engine === 'string' ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+export function resolveEngineModel(settings) {
+  const explicitEngine = (process.env.AI_ENGINE || (process.argv.find((a) => a.startsWith('--engine=')) || '').split('=')[1] || '').trim().toLowerCase();
+  const settingsEngine = String(settings?.engine ?? '').trim().toLowerCase();
+  const engine = ALL_ENGINES.includes(explicitEngine)
+    ? explicitEngine
+    : ALL_ENGINES.includes(settingsEngine)
+      ? settingsEngine
+      : 'antigravity';
+  const explicitModel = process.env.AI_MODEL?.trim();
+  const model = explicitModel || (settingsEngine === engine && settings?.model ? String(settings.model).trim() : ENGINE_DEFAULT_MODEL[engine]);
+  return { engine, model };
 }
 
 const IMAGE_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
@@ -118,13 +154,42 @@ You are running inside the reporting app's automated pipeline, not a chat. The r
 
 // Confirmed on agy 1.2.14 (2 Oct 2026): `@path` attaches the note image, `-p` prints non-interactively,
 // `--json-schema <file>` returns the checked object in `structured_output`.
-function agyArgs(imageRel) {
+function agyArgs(imageRel, model) {
   return [
     '-p', `Follow the instructions in @${WORK_REL}/prompt.md exactly. The handwritten note image is @${imageRel}. Output only the JSON object.`,
-    '--model', MODEL,
+    '--model', model,
     '--output-format', 'json',
     '--json-schema', 'scripts/report.schema.json',
   ];
+}
+
+function opencodeArgs(imageRel, model) {
+  return [
+    'run',
+    '--format', 'json',
+    '-m', model,
+    '-f', `${WORK_REL}/prompt.md`,
+    '-f', imageRel,
+    `Follow the instructions in the attached prompt.md exactly. The attached image is the handwritten note photo. Output only the JSON object.`,
+  ];
+}
+
+/** opencode sits in the npm global folder (or PATH) as an exe/cmd shim. */
+function findOnPath(names) {
+  const dirs = (process.env.PATH || '').split(path.delimiter);
+  for (const dir of dirs) {
+    for (const name of names) {
+      const p = path.join(dir, name);
+      if (fs.existsSync(p)) return p;
+    }
+  }
+  return null;
+}
+
+const OPENCODE_BIN = process.env.OPENCODE_BIN || findOnPath(['opencode.cmd', 'opencode.exe', 'opencode']) || 'opencode';
+
+function engineBin(engine) {
+  return engine === 'opencode' ? OPENCODE_BIN : AGY_BIN;
 }
 
 function killTree(child) {
@@ -133,12 +198,17 @@ function killTree(child) {
   else child.kill('SIGKILL');
 }
 
-function runAgy(imageRel) {
-  const args = agyArgs(imageRel);
+function spawnCli(bin, args) {
   // A .cmd/.bat shim needs a shell. These args are fixed strings without quotes or % signs, so plain quoting is safe.
-  const child = /\.(cmd|bat)$/i.test(AGY_BIN)
-    ? spawn([AGY_BIN, ...args].map((a) => `"${a}"`).join(' '), { cwd: ROOT, shell: true, windowsHide: true })
-    : spawn(AGY_BIN, args, { cwd: ROOT, windowsHide: true });
+  return /\.(cmd|bat)$/i.test(bin)
+    ? spawn([bin, ...args].map((a) => `"${a}"`).join(' '), { cwd: ROOT, shell: true, windowsHide: true })
+    : spawn(bin, args, { cwd: ROOT, windowsHide: true });
+}
+
+function runCli(imageRel, fakeResult, argsFor, engine, model) {
+  if (fakeResult) return Promise.resolve(fs.readFileSync(fakeResult, 'utf8'));
+  const bin = engineBin(engine);
+  const child = spawnCli(bin, argsFor(imageRel, model));
   job.child = child;
   return new Promise((resolve, reject) => {
     let stdout = '';
@@ -157,8 +227,8 @@ function runAgy(imageRel) {
     child.on('close', (code) => {
       clearTimeout(timer);
       const tail = stderr.trim().slice(-500);
-      if (timedOut) reject(new Error(`agy timed out after ${JOB_TIMEOUT_MS / 60_000} min`));
-      else if (code !== 0) reject(new Error(`agy exited with code ${code}${tail ? `: ${tail}` : ''}`));
+      if (timedOut) reject(new Error(`${engine} timed out after ${JOB_TIMEOUT_MS / 60_000} min`));
+      else if (code !== 0) reject(new Error(`${engine} exited with code ${code}${tail ? `: ${tail}` : ''}`));
       else resolve(stdout);
     });
   });
@@ -199,10 +269,10 @@ function firstObject(text) {
  * `structured_output` is the schema-checked object; `response` can carry extra tool-trace keys, so it is only a fallback.
  * Plain JSON, other envelopes and JSON inside prose/code fences are still accepted (and the test seam uses them).
  */
-function parseResult(output) {
+export function parseResult(output) {
   let value = tryJson(output) ?? tryJson(firstObject(output));
   if (typeof value?.status === 'string' && 'structured_output' in value) {
-    if (value.status !== 'SUCCESS') throw new Error(`agy reported ${value.status}: ${String(value.response ?? value.error ?? '').trim().slice(0, 300)}`);
+    if (value.status !== 'SUCCESS') throw new Error(`CLI reported ${value.status}: ${String(value.response ?? value.error ?? '').trim().slice(0, 300)}`);
     if (value.structured_output && typeof value.structured_output === 'object' && !Array.isArray(value.structured_output)) return value.structured_output;
   }
   for (const key of ENVELOPE_KEYS) {
@@ -217,9 +287,49 @@ function parseResult(output) {
     }
   }
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`agy output held no JSON object: ${output.trim().slice(0, 300)}`);
+    throw new Error(`CLI output held no JSON object: ${output.trim().slice(0, 300)}`);
   }
   return value;
+}
+
+/**
+ * opencode `--format json` prints one JSON event per line. The assistant text lives in
+ * assorted event shapes; collect every plausible text fragment and hand the joined text
+ * to parseResult, which tolerates plain JSON, fenced JSON and envelopes.
+ */
+export function extractOpencodeText(stdout) {
+  const parts = [];
+  const collect = (node) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) return node.forEach(collect);
+    for (const [key, value] of Object.entries(node)) {
+      if (key === 'text' && typeof value === 'string') parts.push(value);
+      else if ((key === 'response' || key === 'result' || key === 'output' || key === 'content') && typeof value === 'string') parts.push(value);
+      else if (typeof value === 'object') collect(value);
+    }
+  };
+  for (const line of String(stdout).split(/\r?\n/)) {
+    const event = tryJson(line.trim());
+    if (event) collect(event);
+  }
+  return parts.join('\n');
+}
+
+/** opencode's event stream → the result object. */
+export function parseOpencodeOutput(stdout) {
+  const text = extractOpencodeText(stdout);
+  if (text) {
+    try {
+      return parseResult(text);
+    } catch {
+      // fall through and scan line by line
+    }
+  }
+  for (const line of String(stdout).split(/\r?\n/)) {
+    const obj = tryJson(line.trim());
+    if (obj && !Array.isArray(obj) && ('status' in obj || 'technique' in obj || 'verificationSheet' in obj)) return obj;
+  }
+  return parseResult(stdout); // surfaces the usual "no JSON object" error
 }
 
 function cleanWorkDir() {
@@ -228,19 +338,43 @@ function cleanWorkDir() {
   }
 }
 
+async function listOpencodeModels() {
+  if (opencodeModelsCache) return opencodeModelsCache;
+  try {
+    const bin = engineBin('opencode');
+    const out = await new Promise((resolve, reject) => {
+      const child = spawnCli(bin, ['models']);
+      let stdout = '';
+      child.stdout.setEncoding('utf8').on('data', (d) => (stdout += d));
+      child.on('error', reject);
+      child.on('close', (code) => (code === 0 ? resolve(stdout) : reject(new Error(`models exited ${code}`))));
+    });
+    opencodeModelsCache = out.split(/\r?\n/).map((l) => l.trim()).filter((l) => /^\S+\/\S+/.test(l));
+  } catch {
+    opencodeModelsCache = [];
+  }
+  return opencodeModelsCache;
+}
+
 async function runJob(report) {
   const tag = report.id.slice(0, 8); // ids only in logs, never patient details
   const started = Date.now();
+  const engine = currentEngine; // capture: a Settings change mid-job must not flip the parser
+  const model = currentModel;
   job = { id: report.id, child: null };
-  log(`${tag}: claimed`);
+  log(`${tag}: claimed (${engine}, ${model})`);
   try {
     const image = APP_IS_LOCAL ? resolveImage(report.imagePath) : await downloadImage(report.imagePath);
     if (!image) throw new Error('Source image missing');
     const imageRel = `${WORK_REL}/current${path.extname(image).toLowerCase()}`;
     fs.copyFileSync(image, path.join(ROOT, imageRel));
     fs.writeFileSync(path.join(WORK_DIR, 'prompt.md'), buildPrompt(report, imageRel));
-    const output = AGY_FAKE_RESULT ? fs.readFileSync(AGY_FAKE_RESULT, 'utf8') : await runAgy(imageRel);
-    const saved = await post({ action: 'complete', reportId: report.id, result: parseResult(output) });
+    const fake = engine === 'opencode' ? OPENCODE_FAKE_RESULT : AGY_FAKE_RESULT;
+    const output = fake
+      ? await runCli(imageRel, fake, () => [], engine, model)
+      : await runCli(imageRel, null, engine === 'opencode' ? opencodeArgs : agyArgs, engine, model);
+    const result = engine === 'opencode' ? parseOpencodeOutput(output) : parseResult(output);
+    const saved = await post({ action: 'complete', reportId: report.id, result });
     log(`${tag}: ${saved.status} in ${Math.round((Date.now() - started) / 1000)} s`);
   } catch (err) {
     const reason = String(err?.message || err).slice(0, 2000);
@@ -264,29 +398,48 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
   });
 }
 
-if (!AGY_FAKE_RESULT && !fs.existsSync(AGY_BIN)) {
-  console.error(`[worker] Antigravity CLI not found at ${AGY_BIN}; install Antigravity / set AGY_BIN`);
-  process.exit(1);
-}
+async function main() {
+  fs.mkdirSync(WORK_DIR, { recursive: true });
+  cleanWorkDir();
 
-fs.mkdirSync(WORK_DIR, { recursive: true });
-cleanWorkDir();
-log(`polling ${APP_URL} with ${MODEL} via ${AGY_FAKE_RESULT ? `FAKE result ${AGY_FAKE_RESULT}` : AGY_BIN}`);
+  const heartbeat = () =>
+    listOpencodeModels()
+      .catch(() => [])
+      .then((models) => post({ action: 'heartbeat', busy: Boolean(job), engine: currentEngine, model: currentModel, models }))
+      .catch(() => {});
+  heartbeat();
+  setInterval(heartbeat, 5000);
 
-const heartbeat = () => post({ action: 'heartbeat', busy: Boolean(job) }).catch(() => {});
-heartbeat();
-setInterval(heartbeat, 5000);
+  let lastProblem = '';
+  for (;;) {
+    // Engine/model follow the app Settings unless AI_ENGINE / AI_MODEL force them.
+    const settings = await readSettings();
+    const { engine, model } = resolveEngineModel(settings);
+    if (engine !== currentEngine || model !== currentModel) {
+      currentEngine = engine;
+      currentModel = model;
+      const bin = engineBin(engine);
+      const fake = engine === 'opencode' ? OPENCODE_FAKE_RESULT : AGY_FAKE_RESULT;
+      if (!fake && engine === 'antigravity' && !fs.existsSync(AGY_BIN)) {
+        log(`Antigravity CLI not found at ${AGY_BIN}; set AGY_BIN or pick another engine`);
+      } else if (!fake && engine === 'opencode' && !fs.existsSync(OPENCODE_BIN)) {
+        log(`OpenCode CLI not found at ${OPENCODE_BIN}; set OPENCODE_BIN or pick another engine`);
+      }
+      log(`engine=${engine} model=${model} via ${fake || bin}`);
+    }
 
-let lastProblem = '';
-for (;;) {
-  let report = null;
-  try {
-    ({ report } = await post({ action: 'claim' }));
-    lastProblem = '';
-  } catch (err) {
-    if (err.message !== lastProblem) log(`cannot claim from ${APP_URL}: ${err.message}`);
-    lastProblem = err.message;
+    let report = null;
+    try {
+      ({ report } = await post({ action: 'claim' }));
+      lastProblem = '';
+    } catch (err) {
+      if (err.message !== lastProblem) log(`cannot claim from ${APP_URL}: ${err.message}`);
+      lastProblem = err.message;
+    }
+    if (report) await runJob(report);
+    else await sleep(3000);
   }
-  if (report) await runJob(report);
-  else await sleep(3000);
 }
+
+const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
+if (invokedDirectly) await main();

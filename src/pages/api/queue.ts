@@ -8,12 +8,15 @@ import { guardedUpdate } from '../../lib/ingest';
 // The reports table is the queue. Worker liveness lives in memory only (it drives the UI's online pill).
 let workerLastSeen: number | null = null;
 let workerBusy = false;
+let workerEngine: string | null = null;
+let workerModel: string | null = null;
+let workerModels: string[] = [];
 
-/** A PROCESSING case untouched this long is reclaimed; the worker's own agy timeout is 5 min. */
+/** A PROCESSING case untouched this long is reclaimed; the worker's own job timeout is 10 min. */
 const STALE_MS = 15 * 60 * 1000;
 const REQUEUE: Partial<NewReport> = { status: 'QUEUED', auditStatus: 'PENDING', lastError: null };
 
-export const GET: APIRoute = () => Response.json({ workerLastSeen, workerBusy });
+export const GET: APIRoute = () => Response.json({ workerLastSeen, workerBusy, workerEngine, workerModel, workerModels });
 
 export const POST: APIRoute = async ({ request }) => {
   try {
@@ -24,6 +27,9 @@ export const POST: APIRoute = async ({ request }) => {
     switch (body.action) {
       case 'heartbeat':
         workerBusy = Boolean(body.busy);
+        if (typeof body.engine === 'string') workerEngine = body.engine;
+        if (typeof body.model === 'string') workerModel = body.model;
+        if (Array.isArray(body.models)) workerModels = body.models.filter((m: unknown) => typeof m === 'string');
         return Response.json({ ok: true });
 
       case 'claim':
