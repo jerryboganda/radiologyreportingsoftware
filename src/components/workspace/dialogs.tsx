@@ -10,7 +10,7 @@ import {
   type Radiologist,
 } from '../../lib/institution';
 import type { WordingFlag } from '../../lib/wording';
-import { ENGINE_DEFAULT_LABEL, aiCopy } from '../../lib/aiModel';
+import { ENGINE_DEFAULT_LABEL, aiCopy, modelLabel } from '../../lib/aiModel';
 import { cn } from '../../lib/cn';
 import { Button, Kbd } from '../ui/button';
 import { Dialog, DialogClose, DialogContent, IconButton, PanelContent } from '../ui/overlay';
@@ -291,7 +291,8 @@ export function SettingsDialog({
   open,
   onOpenChange,
   onOpenSignOff,
-  workerModels,
+  workerModelsByEngine,
+  workerModelLabels,
   workerVariants,
   workerEngine,
   workerModel,
@@ -299,7 +300,9 @@ export function SettingsDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onOpenSignOff: () => void;
-  workerModels: string[];
+  /** Every model each engine reports (antigravity from `agy models`, opencode from the gateway). */
+  workerModelsByEngine: Record<string, string[]>;
+  workerModelLabels: Record<string, Record<string, string>>;
   workerVariants: Record<string, string[]>;
   workerEngine: string | null;
   workerModel: string | null;
@@ -339,16 +342,18 @@ export function SettingsDialog({
   }, [open]);
 
   // When a fresh model list arrives, the placeholder note clears.
+  const engineCatalog = workerModelsByEngine[engine] ?? [];
+  const engineLabels = workerModelLabels[engine] ?? {};
   useEffect(() => {
-    if (workerModels.length > 0) setFetchNote('');
-  }, [workerModels]);
+    if (engineCatalog.length > 0) setFetchNote('');
+  }, [engineCatalog]);
 
   const fetchModels = async () => {
     setFetching(true);
     setFetchNote('Fetching the latest models from the worker…');
     try {
       await fetch('/api/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'fetch_models' }) });
-      setFetchNote('The worker re-asks the OpenCode gateway for its models; the list updates within a few seconds. Is the worker online? If it stays empty, start it.');
+      setFetchNote(`The worker re-asks the ${ENGINE_OPTIONS.find((o) => o.value === engine)?.label ?? engine} for its models; the list updates within a few seconds. Is the worker online? If it stays empty, start it.`);
     } catch {
       setFetchNote('Could not reach the app server.');
     } finally {
@@ -382,10 +387,16 @@ export function SettingsDialog({
     }
   };
 
+  /**
+   * The selected engine's own live list (`agy models` for Antigravity, the gateway for OpenCode).
+   * Only when the worker has reported nothing yet does Antigravity fall back to its default model, and
+   * the saved model is always kept visible even if the list is stale.
+   */
   const modelOptions = useMemo(() => {
-    const opts = engine === 'antigravity' ? [ENGINE_DEFAULT_LABEL.antigravity] : workerModels;
+    const reported = workerModelsByEngine[engine] ?? [];
+    const opts = reported.length ? reported : engine === 'antigravity' ? [ENGINE_DEFAULT_LABEL.antigravity] : [];
     return model && !opts.includes(model) ? [...opts, model] : [...opts];
-  }, [engine, workerModels, model]);
+  }, [engine, workerModelsByEngine, model]);
 
   // The effort options follow the selected model in real time; an effort that does not exist for the new model is treated as unset.
   const variantOptions = useMemo(() => workerVariants[model] ?? [], [workerVariants, model]);
@@ -451,11 +462,12 @@ export function SettingsDialog({
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
+                data-model-select
                 className="h-10 w-full rounded-md border border-line bg-surface px-3 text-base text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
               >
                 {modelOptions.map((m) => (
                   <option key={m} value={m}>
-                    {m}
+                    {engineLabels[m] ?? modelLabel(m)}
                   </option>
                 ))}
               </select>
@@ -469,7 +481,11 @@ export function SettingsDialog({
             )}
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted">
-                {fetching ? 'Fetching models…' : workerModels.length > 0 ? `${workerModels.length} model${workerModels.length === 1 ? '' : 's'} reported by the worker.` : 'No models reported — start the worker or fetch again.'}
+                {fetching
+                  ? 'Fetching models…'
+                  : engineCatalog.length > 0
+                    ? `${engineCatalog.length} model${engineCatalog.length === 1 ? '' : 's'} reported for ${ENGINE_OPTIONS.find((o) => o.value === engine)?.label ?? engine}.`
+                    : 'No models reported — start the worker or fetch again.'}
               </p>
               <button type="button" onClick={fetchModels} disabled={fetching} className="text-xs font-medium text-accent hover:underline disabled:opacity-50">
                 Fetch latest

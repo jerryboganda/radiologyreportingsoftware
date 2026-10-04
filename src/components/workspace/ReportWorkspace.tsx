@@ -518,7 +518,19 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
         }}
       />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} onOpenSignOff={() => { setSettingsOpen(false); setSignOffOpen(true); }} workerModels={api.engineModels} workerVariants={api.engineModelVariants} workerEngine={api.engineEngine} workerModel={api.engineModel} />
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        onOpenSignOff={() => {
+          setSettingsOpen(false);
+          setSignOffOpen(true);
+        }}
+        workerModelsByEngine={api.engineModelsByEngine}
+        workerModelLabels={api.engineModelLabels}
+        workerVariants={api.engineModelVariants}
+        workerEngine={api.engineEngine}
+        workerModel={api.engineModel}
+      />
       <SignOffSettings open={signOffOpen} onOpenChange={setSignOffOpen} />
     </div>
   );

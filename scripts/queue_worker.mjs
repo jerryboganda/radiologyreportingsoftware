@@ -386,7 +386,8 @@ function cleanWorkDir() {
 }
 
 const MODELS_CACHE_MS = 60_000;
-let modelsCache = { at: 0, list: null, variants: {} };
+/** Per-engine catalogues: engineModels feeds the app's Settings list, variants the reasoning-effort options. */
+let modelsCache = { at: 0, list: null, variants: {}, engineModels: {}, engineLabels: {} };
 let modelsFetch = null; // the one in-flight models run, shared by the heartbeat and the main loop
 
 const modelsStale = () => !modelsCache.list || Date.now() - modelsCache.at >= MODELS_CACHE_MS;
@@ -401,7 +402,27 @@ function runCapture(bin, args) {
   });
 }
 
-/** Parses `agy models` (effort is encoded in the id suffix) into per-family effort options. */
+/**
+ * `agy models` → the model catalogue. Verified against agy 1.2.14: a "Fetching available models..."
+ * header line, then one `<id>\t<label>` pair per model (18 on 5 Oct 2026: gemini-3.8-flash-high,
+ * …-medium, …-low, gemini-3.1-pro-high/low, claude-opus-5-5-*, claude-sonnet-5-5-*, gpt-oss-120b-medium).
+ * Only real pairs are taken, so headers, help text and blank lines are ignored.
+ */
+export function agyModelCatalog(out) {
+  const models = [];
+  const labels = {};
+  for (const line of String(out ?? '').split(/\r?\n/)) {
+    const [rawId, ...rest] = line.split('\t');
+    const id = (rawId ?? '').trim();
+    const label = rest.join(' ').trim();
+    if (!id || !label || /\s/.test(id)) continue; // an id never contains a space; a header line does
+    if (!(id in labels)) models.push(id);
+    labels[id] = label;
+  }
+  return { models, labels };
+}
+
+/** Parses `agy models` into per-family effort options (the effort is also encoded in the id suffix). */
 function parseAgyModels(out, variants) {
   const byFamily = {};
   for (const line of out.split(/\r?\n/)) {
@@ -418,29 +439,38 @@ function parseAgyModels(out, variants) {
   }
 }
 
-/** Refreshes the model lists and their reasoning-effort options; concurrent callers share one run. */
+/** The OpenCode gateway's model list, ids only (labels are derived in the app). */
+async function fetchGatewayModels() {
+  const res = await fetch(`${GATEWAY_BASE}/models`, { headers: { Authorization: `Bearer ${gatewayKey()}` }, signal: AbortSignal.timeout(30_000) });
+  if (!res.ok) throw new Error(`models HTTP ${res.status}`);
+  const data = await res.json();
+  const rows = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+  return rows.map((m) => (typeof m === 'string' ? m : m?.id)).filter((m) => typeof m === 'string');
+}
+
+/**
+ * Refreshes both engines' catalogues and the reasoning-effort options; concurrent callers share one run.
+ * Each engine is fetched independently: one being unreachable never empties the other's list.
+ */
 function refreshOpencodeModels() {
   modelsFetch ??= (async () => {
+    const next = { at: Date.now(), list: modelsCache.list ?? [], variants: { ...modelsCache.variants }, engineModels: { ...modelsCache.engineModels }, engineLabels: { ...modelsCache.engineLabels } };
     try {
-      const variants = {};
-      let list = [];
-      try {
-        const res = await fetch(`${GATEWAY_BASE}/models`, { headers: { Authorization: `Bearer ${gatewayKey()}` }, signal: AbortSignal.timeout(30_000) });
-        if (!res.ok) throw new Error(`models HTTP ${res.status}`);
-        const data = await res.json();
-        const rows = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
-        list = rows.map((m) => (typeof m === 'string' ? m : m?.id)).filter((m) => typeof m === 'string');
-      } catch {}
-      try {
-        const agyOut = await runCapture(AGY_BIN, ['models']);
-        parseAgyModels(agyOut, variants);
-      } catch {}
-      modelsCache = { at: Date.now(), list, variants };
-    } catch {
-      modelsCache = { at: Date.now(), list: [], variants: {} };
-    } finally {
-      modelsFetch = null;
-    }
+      const list = await fetchGatewayModels();
+      next.list = list;
+      if (list.length) next.engineModels.opencode = list;
+    } catch {}
+    try {
+      const agyOut = await runCapture(AGY_BIN, ['models']);
+      const { models, labels } = agyModelCatalog(agyOut);
+      if (models.length) {
+        next.engineModels.antigravity = models;
+        next.engineLabels.antigravity = labels;
+        parseAgyModels(agyOut, next.variants);
+      }
+    } catch {}
+    modelsCache = next;
+    modelsFetch = null;
   })();
   return modelsFetch;
 }
@@ -576,7 +606,17 @@ async function main() {
       // The beat must never wait on the models refresh: a slow gateway call is done in
       // the background, and a delayed heartbeat reads as "AI engine offline" in the app.
       if (modelsStale()) refreshOpencodeModels().catch(() => {});
-      const body = await post({ action: 'heartbeat', busy: Boolean(job) || Boolean(testToRun), engine: currentEngine, model: currentModel, models: modelsCache.list ?? [], modelVariants: modelsCache.variants ?? {} });
+      const body = await post({
+        action: 'heartbeat',
+        busy: Boolean(job) || Boolean(testToRun),
+        engine: currentEngine,
+        model: currentModel,
+        models: modelsCache.list ?? [],
+        modelVariants: modelsCache.variants ?? {},
+        // Per-engine catalogues, so the app's Settings shows every model the selected engine really offers.
+        engineModels: modelsCache.engineModels ?? {},
+        engineLabels: modelsCache.engineLabels ?? {},
+      });
       if (body?.test && !job && !testToRun) testToRun = body.test;
       if (body?.refreshModels) needModelFetch = true;
     } catch {}
@@ -636,5 +676,52 @@ async function main() {
   }
 }
 
+/**
+ * Fresh, real-time checks that never touch the queue, the app or any file:
+ *   node scripts/queue_worker.mjs --list-models [--engine=antigravity|opencode]
+ *   node scripts/queue_worker.mjs --test-engine=opencode --test-model=deepseek-v4.1-flash [--test-variant=…]
+ * The list mode prints what the app's Settings dropdown will show for that engine, fetched now.
+ */
+async function runCliMode() {
+  const arg = (name) => (process.argv.find((a) => a.startsWith(`--${name}=`)) || '').split('=').slice(1).join('=');
+  const wantList = process.argv.includes('--list-models');
+  const testEngineId = arg('test-engine');
+  if (!wantList && !testEngineId) return false;
+
+  if (testEngineId) {
+    const model = arg('test-model') || ENGINE_DEFAULT_MODEL[testEngineId] || '';
+    const variant = arg('test-variant');
+    if (!model) {
+      log(`--test-model is required (no default for ${testEngineId})`);
+      process.exitCode = 1;
+      return true;
+    }
+    log(`testing ${testEngineId} with ${model}${variant ? ` (${variant})` : ''}`);
+    const result = await testEngine(testEngineId, model, variant);
+    log(`test ${result.ok ? 'OK' : 'FAILED'}${result.detail ? `: ${result.detail.split('\n')[0].slice(0, 200)}` : ''}`);
+    process.exitCode = result.ok ? 0 : 1;
+    return true;
+  }
+
+  const engine = arg('engine') || 'antigravity';
+  if (engine === 'opencode') {
+    const list = await fetchGatewayModels();
+    log(`${list.length} models from the OpenCode gateway:`);
+    for (const id of list) console.log(id);
+    process.exitCode = list.length ? 0 : 1;
+    return true;
+  }
+  if (engine !== 'antigravity') {
+    log(`unknown engine ${engine}; use antigravity or opencode`);
+    process.exitCode = 1;
+    return true;
+  }
+  const { models, labels } = agyModelCatalog(await runCapture(AGY_BIN, ['models']));
+  log(`${models.length} models from ${AGY_BIN}:`);
+  for (const id of models) console.log(`${id}\t${labels[id] ?? ''}`);
+  process.exitCode = models.length ? 0 : 1;
+  return true;
+}
+
 const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
-if (invokedDirectly) await main();
+if (invokedDirectly && !(await runCliMode())) await main();

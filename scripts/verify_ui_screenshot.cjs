@@ -12,6 +12,30 @@ const OUT = path.resolve(process.argv[3] || path.join(__dirname, '..', '.ui-chec
 // The AI banners must name the model the worker reports, never a hardcoded one.
 const WORKER_ENGINE = process.env.AI_ENGINE || 'opencode';
 const WORKER_MODEL = process.env.AI_MODEL || 'deepseek-v4.1-flash';
+// The per-engine catalogues the heartbeat reports (antigravity: a real `agy models` capture, 18 models).
+const AGY_CATALOG = [
+  ['gemini-3.8-flash-high', 'Gemini 3.8 Flash (High)'],
+  ['gemini-3.8-flash-medium', 'Gemini 3.8 Flash (Medium)'],
+  ['gemini-3.8-flash-low', 'Gemini 3.8 Flash (Low)'],
+  ['gemini-3.7-flash-high', 'Gemini 3.7 Flash (High)'],
+  ['gemini-3.7-flash-medium', 'Gemini 3.7 Flash (Medium)'],
+  ['gemini-3.7-flash-low', 'Gemini 3.7 Flash (Low)'],
+  ['gemini-3.6-flash-high', 'Gemini 3.6 Flash (High)'],
+  ['gemini-3.6-flash-medium', 'Gemini 3.6 Flash (Medium)'],
+  ['gemini-3.6-flash-low', 'Gemini 3.6 Flash (Low)'],
+  ['gemini-3.1-pro-high', 'Gemini 3.1 Pro (High)'],
+  ['gemini-3.1-pro-low', 'Gemini 3.1 Pro (Low)'],
+  ['claude-opus-5-5-low', 'Claude Opus 5.5 (Low)'],
+  ['claude-opus-5-5-medium', 'Claude Opus 5.5 (Medium)'],
+  ['claude-opus-5-5-high', 'Claude Opus 5.5 (High)'],
+  ['claude-sonnet-5-5-low', 'Claude Sonnet 5.5 (Low)'],
+  ['claude-sonnet-5-5-medium', 'Claude Sonnet 5.5 (Medium)'],
+  ['claude-sonnet-5-5-high', 'Claude Sonnet 5.5 (High)'],
+  ['gpt-oss-120b-medium', 'GPT-OSS 120B (Medium)'],
+];
+const LABELS = Object.fromEntries(AGY_CATALOG);
+const AGY_IDS = AGY_CATALOG.map(([id]) => id);
+const GW_IDS = [WORKER_MODEL, 'deepseek-v4-flash', 'glm-5.3', 'glm-5.3-flash', 'gpt-6-luna', 'qwen3.8-max', 'kimi-k3', 'minimax-m3', 'space-bunny-free'];
 const localName = (id) =>
   id
     .split(/[-_\s]+/)
@@ -146,6 +170,10 @@ const scenarios = [
   { name: 'blocked-1366-light', w: 1366, h: 768, scheme: 'light', list: listWith('blocked'), online: true },
   { name: 'failed-1366-dark', w: 1366, h: 768, scheme: 'dark', list: listWith('failed'), online: true },
   { name: 'finalized-1366-light', w: 1366, h: 768, scheme: 'light', list: listWith('finalized'), online: true },
+  // Settings → Model must list the whole live catalogue of the selected engine (not one hardcoded model).
+  { name: 'settings-antigravity-1366-light', w: 1366, h: 768, scheme: 'light', list: listWith('draft'), online: true, step: 'settings', settingsModel: 'gemini-3.8-flash-high', catalog: AGY_IDS, catalogLabel: 'Gemini 3.8 Flash (High)' },
+  { name: 'settings-opencode-1366-dark', w: 1366, h: 768, scheme: 'dark', list: listWith('draft'), online: true, step: 'settings', settingsEngine: 'opencode', settingsModel: 'deepseek-v4.1-flash', catalog: GW_IDS, catalogLabel: 'Space Bunny Free' },
+  { name: 'settings-switch-1366-light', w: 1366, h: 768, scheme: 'light', list: listWith('draft'), online: true, step: 'settings', settingsEngine: 'opencode', settingsModel: 'deepseek-v4.1-flash', catalog: GW_IDS, switchEngine: 'antigravity', switchCatalog: AGY_IDS, otherModel: 'deepseek-v4.1-flash' },
   { name: 'end-of-sheet-1366-light', w: 1366, h: 768, scheme: 'light', list: listWith('draft'), online: true, step: 'end' },
   { name: 'audit-1366-light', w: 1366, h: 768, scheme: 'light', list: listWith('draft'), online: true, step: 'audit' },
   { name: 'approve-1366-dark', w: 1366, h: 768, scheme: 'dark', list: listWith('draft'), online: true, step: 'approve' },
@@ -206,9 +234,14 @@ async function run() {
           workerBusy: !!s.busy,
           workerEngine: WORKER_ENGINE,
           workerModel: WORKER_MODEL,
-          workerModels: [WORKER_MODEL, 'glm-5.3-flash', 'gpt-6-luna'],
+          workerModels: GW_IDS,
           workerModelVariants: {},
+          workerEngineModels: { antigravity: AGY_IDS, opencode: GW_IDS },
+          workerEngineLabels: { antigravity: LABELS },
         });
+      if (url.pathname === '/api/settings' && req.method() === 'GET') return json(200, { engine: s.settingsEngine || 'antigravity', model: s.settingsModel || 'gemini-3.8-flash-high', variant: '', institution: {} });
+      // The Settings dialog asks the worker to re-list models; answer it locally instead of letting it 409.
+      if (url.pathname === '/api/queue' && req.method() === 'POST') return json(200, { ok: true });
       if (url.pathname.startsWith('/api/') || req.method() !== 'GET') return json(409, { error: 'UI verification run: writes are disabled' });
       if (url.pathname.startsWith('/uploads/')) return req.respond({ status: 404, body: '' }); // never load real note photos
       return req.continue();
@@ -222,22 +255,68 @@ async function run() {
     if (s.step === 'audit') await page.click('button[aria-label="Audit sheet"]');
     if (s.step === 'approve') await clickText(/Approve & download/);
     if (s.step === 'note') await clickText(/^Note$/);
+    if (s.step === 'settings') await page.click('button[aria-label="AI settings"]');
     if (s.step === 'drawer') await page.click('button[aria-label="Open case list"]');
     if (s.step === 'end') await page.evaluate(() => document.querySelector('#impression')?.closest('.overflow-y-auto')?.scrollTo(0, 1e6));
     if (s.step) await sleep(600);
 
-    const m = await page.evaluate(() => {
-      const visible = (el) => !!el.offsetParent && el.getBoundingClientRect().width > 0;
+    // The Engine select, when the scenario switches engines after reading the saved one.
+    const switchEngineAndRead = async (next) => {
+      await page.evaluate((value) => {
+        const select = document.querySelector('[role="dialog"] select');
+        if (!select) return;
+        const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+        setter.call(select, value);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      }, next);
+      await sleep(600);
+      return page.evaluate(() => {
+        const modelSelect = document.querySelector('[role="dialog"] select[data-model-select]');
+        return modelSelect ? [...modelSelect.options].map((o) => ({ value: o.value, label: o.textContent.trim() })) : [];
+      });
+    };
+    const readModelSelect = () =>
+      page.evaluate(() => {
+        const modelSelect = document.querySelector('[role="dialog"] select[data-model-select]');
+        return modelSelect
+          ? { options: [...modelSelect.options].map((o) => ({ value: o.value, label: o.textContent.trim() })), value: modelSelect.value }
+          : { options: [], value: '' };
+      });
+
+    // Read the saved engine's list first, then switch the Engine select and read the other engine's.
+    const before = s.step === 'settings' ? await readModelSelect() : { options: [], value: '' };
+    // The count line re-renders a beat after the list arrives; wait it out, then snapshot it before any switch.
+    const readFooter = () =>
+      page.evaluate(() => [...document.querySelectorAll('[role="dialog"] p')].map((p) => p.innerText.trim()).find((t) => /models reported/.test(t)) ?? '');
+    for (let i = 0; i < 12 && s.catalog; i += 1) {
+      const footer = await readFooter();
+      if (footer.includes(String(s.catalog.length))) break;
+      await sleep(300);
+    }
+    before.footer = await readFooter();
+    const switched = s.switchEngine ? await switchEngineAndRead(s.switchEngine) : null;
+
+    const m = await page.evaluate(() => {      const visible = (el) => !!el.offsetParent && el.getBoundingClientRect().width > 0;
       const controls = [...document.querySelectorAll('header button, header a, [role="group"] button, nav button')].filter(visible);
       const clipped = controls.filter((el) => el.scrollWidth > el.clientWidth + 1 || el.getBoundingClientRect().height > 46).map((el) => el.getAttribute('aria-label') || el.textContent.trim().slice(0, 30));
       const unnamed = [...document.querySelectorAll('button, a[href]')].filter((el) => visible(el) && !el.textContent.trim() && !el.getAttribute('aria-label')).map((el) => el.outerHTML.slice(0, 80));
       const text = document.body.innerText;
       // The rows and banners that name the model (the sidebar engine row + the state banner).
       const named = [...document.querySelectorAll('[role="status"], [role="alert"]')].map((el) => el.innerText).join('\n');
+      // The AI settings dialog's Model list, when it is open.
+      const modelSelect = document.querySelector('[role="dialog"] select[data-model-select]');
+      const modelOptions = modelSelect ? [...modelSelect.options].map((o) => ({ value: o.value, label: o.textContent.trim() })) : [];
+      const modelValue = modelSelect ? modelSelect.value : '';
+      const modelNote = [...document.querySelectorAll('[role="dialog"] p')].map((p) => p.innerText).find((t) => /models reported/.test(t)) ?? '';
+      // The footer line sits in a paragraph next to the Model select (it can read 0 on first paint, so read it when the list is there).
+      const modelFooter = [...document.querySelectorAll('[role="dialog"] p')].map((p) => p.innerText.trim()).find((t) => /models reported/.test(t)) ?? '';
       return {
         text,
         named,
-        overflowX: document.documentElement.scrollWidth - window.innerWidth,
+        modelOptions,
+        modelValue,
+        modelNote,
+        modelFooter,
         clipped,
         unnamed,
         alerts: document.querySelectorAll('[role="alert"]').length,
@@ -264,6 +343,17 @@ async function run() {
       (s.name.startsWith('queued-') || s.name.startsWith('processing-')) && !m.named.includes(workerName) && `the banner does not name the live model (${workerName})`,
       // Nothing on screen may claim that a different model is reading or queued (error text may quote any engine).
       s.online && /is reading the note|will pick this note up/i.test(m.named) && !m.named.includes(workerName) && `a model other than the live one (${workerName}) is said to be working: ${m.named.slice(0, 120)}`,
+      // Settings → Model shows the selected engine's whole live catalogue, ids intact and in order.
+      s.catalog && before.options.length < s.catalog.length && `the Model list shows ${before.options.length} of ${s.catalog.length} reported models`,
+      s.catalog && !s.catalog.every((id, i) => before.options[i]?.value === id) && `the Model list is not the reported catalogue (${before.options.slice(0, 3).map((o) => o.value).join(', ')} …)`,
+      s.catalog && before.options.length > s.catalog.length && before.options.slice(s.catalog.length).every((o) => o.value === s.otherModel) === false && 'an unexpected entry is in the Model list',
+      s.catalogLabel && !before.options.some((o) => o.label === s.catalogLabel) && `no option is labelled "${s.catalogLabel}" (labels: ${before.options.slice(0, 3).map((o) => o.label).join(' / ')})`,
+      s.catalog && !before.footer.includes(String(s.catalog.length)) && `the dialog does not state the ${s.catalog.length} reported models (${before.footer})`,
+      s.catalog && before.value !== s.settingsModel && `the saved model is not selected (${before.value})`,
+      // Switching engine shows the other engine's list (plus the still-saved model, kept visible by design).
+      s.switchCatalog &&
+        (switched.length < s.switchCatalog.length || !s.switchCatalog.every((id, i) => switched[i]?.value === id)) &&
+        `switching to ${s.switchEngine} does not list its ${s.switchCatalog.length} models (${switched.slice(0, 3).map((o) => o.value).join(', ')} …)`,
     ].filter(Boolean);
     console.log(`${problems.length ? '✗' : '✓'} ${s.name}${problems.length ? ' — ' + problems.join('; ') : ''}`);
     if (problems.length) failures.push(s.name);

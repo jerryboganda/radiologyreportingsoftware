@@ -12,6 +12,9 @@ let workerEngine: string | null = null;
 let workerModel: string | null = null;
 let workerModels: string[] = [];
 let workerModelVariants: Record<string, string[]> = {};
+/** Per-engine catalogues: everything each engine actually offers (antigravity ids come from `agy models`). */
+let workerEngineModels: Record<string, string[]> = {};
+let workerEngineLabels: Record<string, Record<string, string>> = {};
 
 /** Engine self-test requested from the app, awaiting the worker; delivered via heartbeat. */
 let pendingTest: { engine: string; model: string; variant: string } | null = null;
@@ -23,7 +26,20 @@ let modelsRefreshRequested = false;
 const STALE_MS = 15 * 60 * 1000;
 const REQUEUE: Partial<NewReport> = { status: 'QUEUED', auditStatus: 'PENDING', lastError: null };
 
-export const GET: APIRoute = () => Response.json({ workerLastSeen, workerBusy, workerEngine, workerModel, workerModels, workerModelVariants, lastTest, pendingTest: Boolean(pendingTest), modelsRefreshRequested });
+export const GET: APIRoute = () =>
+  Response.json({
+    workerLastSeen,
+    workerBusy,
+    workerEngine,
+    workerModel,
+    workerModels,
+    workerModelVariants,
+    workerEngineModels,
+    workerEngineLabels,
+    lastTest,
+    pendingTest: Boolean(pendingTest),
+    modelsRefreshRequested,
+  });
 
 export const POST: APIRoute = async ({ request }) => {
   try {
@@ -43,6 +59,19 @@ export const POST: APIRoute = async ({ request }) => {
               ([, v]) => Array.isArray(v) && v.every((x) => typeof x === 'string'),
             ),
           ) as Record<string, string[]>;
+        }
+        // Per-engine model lists; only a non-empty list replaces the stored one (a partial refresh never wipes it).
+        if (body.engineModels && typeof body.engineModels === 'object') {
+          for (const [key, value] of Object.entries(body.engineModels as Record<string, unknown>)) {
+            if (Array.isArray(value) && value.length && value.every((m) => typeof m === 'string')) workerEngineModels[key] = value as string[];
+          }
+        }
+        if (body.engineLabels && typeof body.engineLabels === 'object') {
+          for (const [key, value] of Object.entries(body.engineLabels as Record<string, unknown>)) {
+            if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+            const labels = Object.fromEntries(Object.entries(value as Record<string, unknown>).filter(([, v]) => typeof v === 'string'));
+            if (Object.keys(labels).length) workerEngineLabels[key] = labels as Record<string, string>;
+          }
         }
         // Deliver queued requests to the worker, once, then clear them.
         const reply = { ok: true, test: pendingTest, refreshModels: modelsRefreshRequested };

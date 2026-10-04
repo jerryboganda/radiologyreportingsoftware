@@ -12,6 +12,7 @@
     "check:api": "node scripts/api-check.mjs",
     "check:wording": "node scripts/wording-check.test.mjs",
     "check:ai-model": "node scripts/ai-model.test.mjs",
+    "check:models": "node scripts/check-models.mjs",
     "check:auth": "node scripts/auth-check.mjs",
     "check:ui": "node scripts/verify_ui_screenshot.cjs",
     "worker:antigravity": "node scripts/queue_worker.mjs --engine=antigravity",

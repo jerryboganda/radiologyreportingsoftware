@@ -45,13 +45,25 @@ export function useReports() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ReportItem | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
-  const [engine, setEngine] = useState<{ lastSeen: number | null; busy: boolean; engine: string | null; model: string | null; models: string[]; modelVariants: Record<string, string[]> }>({
+  const [engine, setEngine] = useState<{
+    lastSeen: number | null;
+    busy: boolean;
+    engine: string | null;
+    model: string | null;
+    models: string[];
+    modelVariants: Record<string, string[]>;
+    /** Everything each engine offers, and its display labels (Settings → Model). */
+    modelsByEngine: Record<string, string[]>;
+    labelsByEngine: Record<string, Record<string, string>>;
+  }>({
     lastSeen: null,
     busy: false,
     engine: null,
     model: null,
     models: [],
     modelVariants: {},
+    modelsByEngine: {},
+    labelsByEngine: {},
   });
 
   // Refs mirror state for async work (poll, debounced save) so callbacks never act on stale values.
@@ -99,13 +111,23 @@ export function useReports() {
     try {
       const [list, queue] = await Promise.all([
         api<ReportItem[]>('/api/reports'),
-        api<{ workerLastSeen: number | null; workerBusy: boolean; workerEngine: string | null; workerModel: string | null; workerModels: string[]; workerModelVariants?: Record<string, string[]> }>('/api/queue').catch(() => null),
+        api<{ workerLastSeen: number | null; workerBusy: boolean; workerEngine: string | null; workerModel: string | null; workerModels: string[]; workerModelVariants?: Record<string, string[]>; workerEngineModels?: Record<string, string[]>; workerEngineLabels?: Record<string, Record<string, string>> }>('/api/queue').catch(() => null),
       ]);
       reportsRef.current = list;
       setReports(list);
       setLoaded(true);
       setLoadError(null);
-      if (queue) setEngine({ lastSeen: queue.workerLastSeen, busy: queue.workerBusy, engine: queue.workerEngine, model: queue.workerModel, models: queue.workerModels ?? [], modelVariants: queue.workerModelVariants ?? {} });
+      if (queue)
+        setEngine({
+          lastSeen: queue.workerLastSeen,
+          busy: queue.workerBusy,
+          engine: queue.workerEngine,
+          model: queue.workerModel,
+          models: queue.workerModels ?? [],
+          modelVariants: queue.workerModelVariants ?? {},
+          modelsByEngine: queue.workerEngineModels ?? {},
+          labelsByEngine: queue.workerEngineLabels ?? {},
+        });
       const current = list.find((r) => r.id === selectedRef.current);
       if (current) adopt(current);
     } catch (error) {
@@ -445,6 +467,8 @@ export function useReports() {
     engineModel: engine.model,
     engineModels: engine.models,
     engineModelVariants: engine.modelVariants,
+    engineModelsByEngine: engine.modelsByEngine,
+    engineModelLabels: engine.labelsByEngine,
     counts,
     refresh,
     select,
