@@ -366,9 +366,8 @@ export function SettingsDialog({
   };
 
   const modelOptions = useMemo(() => {
-    if (engine === 'antigravity') return ['gemini-3.8-flash-high'];
-    const opts = workerModels.length > 0 ? workerModels : [];
-    return model && !opts.includes(model) ? [...opts, model] : opts;
+    const opts = engine === 'antigravity' ? ['gemini-3.8-flash-high'] : workerModels;
+    return model && !opts.includes(model) ? [...opts, model] : [...opts];
   }, [engine, workerModels, model]);
 
   const save = async () => {
