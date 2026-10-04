@@ -44,6 +44,15 @@ const ENVELOPE_KEYS = ['response', 'result', 'text', 'output', 'content'];
 let job = null; // { id, child } while a case is being processed
 let currentEngine = null;
 let currentModel = null;
+let currentVariant = '';
+
+const EFFORT_SUFFIX = /-(low|medium|high|xhigh|max)$/;
+
+/** Applies the saved reasoning effort to a model id (antigravity encodes effort in the id). */
+function agyModelWithEffort(model, variant) {
+  if (!variant) return model;
+  return EFFORT_SUFFIX.test(model) ? model.replace(EFFORT_SUFFIX, `-${variant}`) : model;
+}
 
 const log = (msg) => console.log(`${new Date().toLocaleTimeString()} [worker] ${msg}`);
 
@@ -81,7 +90,8 @@ export function resolveEngineModel(settings) {
       : 'antigravity';
   const explicitModel = process.env.AI_MODEL?.trim();
   const model = explicitModel || (settingsEngine === engine && settings?.model ? String(settings.model).trim() : ENGINE_DEFAULT_MODEL[engine]);
-  return { engine, model };
+  const variant = (process.env.AI_VARIANT || '').trim() || (settingsEngine === engine && typeof settings?.variant === 'string' ? settings.variant.trim() : '');
+  return { engine, model, variant };
 }
 
 const IMAGE_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
@@ -153,17 +163,19 @@ You are running inside the reporting app's automated pipeline, not a chat. The r
 
 // Confirmed on agy 1.2.14 (2 Oct 2026): `@path` attaches the note image, `-p` prints non-interactively,
 // `--json-schema <file>` returns the checked object in `structured_output`.
-function agyArgs(imageRel, model) {
-  return [
+function agyArgs(imageRel, model, variant = '') {
+  const args = [
     '-p', `Follow the instructions in @${WORK_REL}/prompt.md exactly. The handwritten note image is @${imageRel}. Output only the JSON object.`,
-    '--model', model,
+    '--model', agyModelWithEffort(model, variant),
     '--output-format', 'json',
     '--json-schema', 'scripts/report.schema.json',
   ];
+  if (variant && !EFFORT_SUFFIX.test(model)) args.push('--effort', variant);
+  return args;
 }
 
-function opencodeArgs(imageRel, model) {
-  return [
+function opencodeArgs(imageRel, model, variant = '') {
+  const args = [
     'run',
     '--format', 'json',
     '-m', model,
@@ -171,6 +183,8 @@ function opencodeArgs(imageRel, model) {
     '-f', imageRel,
     `Follow the instructions in the attached prompt.md exactly. The attached image is the handwritten note photo. Output only the JSON object.`,
   ];
+  if (variant) args.splice(3, 0, '--variant', variant);
+  return args;
 }
 
 /** opencode sits in the npm global folder (or PATH) as an exe/cmd shim. */
@@ -204,10 +218,10 @@ function spawnCli(bin, args) {
     : spawn(bin, args, { cwd: ROOT, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
-function runCli(imageRel, fakeResult, argsFor, engine, model) {
+function runCli(imageRel, fakeResult, argsFor, engine, model, variant = '') {
   if (fakeResult) return Promise.resolve(fs.readFileSync(fakeResult, 'utf8'));
   const bin = engineBin(engine);
-  const child = spawnCli(bin, argsFor(imageRel, model));
+  const child = spawnCli(bin, argsFor(imageRel, model, variant));
   job.child = child;
   return new Promise((resolve, reject) => {
     let stdout = '';
@@ -412,8 +426,9 @@ async function runJob(report) {
   const started = Date.now();
   const engine = currentEngine; // capture: a Settings change mid-job must not flip the parser
   const model = currentModel;
+  const variant = currentVariant;
   job = { id: report.id, child: null };
-  log(`${tag}: claimed (${engine}, ${model})`);
+  log(`${tag}: claimed (${engine}, ${model}${variant ? `, ${variant}` : ''})`);
   try {
     const image = APP_IS_LOCAL ? resolveImage(report.imagePath) : await downloadImage(report.imagePath);
     if (!image) throw new Error('Source image missing');
@@ -423,7 +438,7 @@ async function runJob(report) {
     const fake = engine === 'opencode' ? OPENCODE_FAKE_RESULT : AGY_FAKE_RESULT;
     const output = fake
       ? await runCli(imageRel, fake, () => [], engine, model)
-      : await runCli(imageRel, null, engine === 'opencode' ? opencodeArgs : agyArgs, engine, model);
+      : await runCli(imageRel, null, engine === 'opencode' ? opencodeArgs : agyArgs, engine, model, variant);
     const result = engine === 'opencode' ? parseOpencodeOutput(output) : parseResult(output);
     const saved = await post({ action: 'complete', reportId: report.id, result });
     log(`${tag}: ${saved.status} in ${Math.round((Date.now() - started) / 1000)} s`);
@@ -452,6 +467,32 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 async function main() {
   fs.mkdirSync(WORK_DIR, { recursive: true });
   cleanWorkDir();
+
+  // One worker per app (the scratch folder is per APP_URL): a second start exits, so a manual
+  // launch and the autostart task never run two AI engines into the same scratch folder.
+  const lockPath = path.join(WORK_DIR, 'worker.lock');
+  try {
+    const other = Number(fs.readFileSync(lockPath, 'utf8').trim());
+    if (Number.isInteger(other) && other > 0) {
+      let alive = true;
+      try {
+        process.kill(other, 0);
+      } catch (err) {
+        alive = err.code === 'EPERM';
+      }
+      if (alive) {
+        log(`another worker for ${APP_URL} is already running (pid ${other}); exiting. If that is wrong, delete ${lockPath}.`);
+        return;
+      }
+      log(`taking over a stale lock left by pid ${other}`);
+    }
+  } catch {}
+  fs.writeFileSync(lockPath, String(process.pid));
+  process.on('exit', () => {
+    try {
+      if (fs.readFileSync(lockPath, 'utf8').trim() === String(process.pid)) fs.rmSync(lockPath, { force: true });
+    } catch {}
+  });
 
   // Queued actions handed over by /api/queue's heartbeat reply, execution started in the main loop.
   let testToRun = null;
