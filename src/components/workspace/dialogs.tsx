@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { BadgeCheck, CircleDashed, Download, History, MessageCircleQuestion, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import type { ReportItem } from '../../lib/report';
@@ -292,6 +292,10 @@ export function SettingsDialog({
   const [engine, setEngine] = useState('antigravity');
   const [model, setModel] = useState('');
   const [busy, setBusy] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [fetchNote, setFetchNote] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; detail: string } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -304,10 +308,68 @@ export function SettingsDialog({
         setModel(typeof s.model === 'string' ? s.model : '');
       })
       .catch(() => {});
+    // Opening the dialog asks the worker to re-list models; the updated list arrives on its next heartbeat.
+    setFetching(true);
+    setFetchNote('Asking the worker for the current model list…');
+    fetch('/api/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'fetch_models' }) })
+      .catch(() => setFetchNote('Could not reach the app server.'))
+      .finally(() => {
+        if (!cancelled) setTimeout(() => setFetching(false), 3000);
+      });
     return () => {
       cancelled = true;
     };
   }, [open]);
+
+  // When a fresh model list arrives, the placeholder note clears.
+  useEffect(() => {
+    if (workerModels.length > 0) setFetchNote('');
+  }, [workerModels]);
+
+  const fetchModels = async () => {
+    setFetching(true);
+    setFetchNote('Fetching the latest models from the worker…');
+    try {
+      await fetch('/api/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'fetch_models' }) });
+      setFetchNote('The worker re-lists `opencode models`; the list updates within a few seconds. Is the worker online? If it stays empty, start it.');
+    } catch {
+      setFetchNote('Could not reach the app server.');
+    } finally {
+      setTimeout(() => setFetching(false), 3000);
+    }
+  };
+
+  const testConnection = async () => {
+    setTesting(true);
+    setTestResult(null);
+    const startedAt = Date.now();
+    try {
+      await fetch('/api/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'request_test', engine, model: model.trim() }) });
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const q = await fetch('/api/queue').then((r) => r.json()).catch(() => null);
+        const t = q?.lastTest;
+        if (t && t.at >= startedAt && t.engine === engine && t.model === model.trim()) {
+          setTestResult({ ok: Boolean(t.ok), detail: String(t.detail ?? '') });
+          break;
+        }
+        if (Date.now() - startedAt > 150_000) {
+          setTestResult({ ok: false, detail: 'No response from the worker. Make sure it is running and the selected engine is installed.' });
+          break;
+        }
+      }
+    } catch (error) {
+      setTestResult({ ok: false, detail: (error as Error).message });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const modelOptions = useMemo(() => {
+    if (engine === 'antigravity') return ['gemini-3.8-flash-high'];
+    const opts = workerModels.length > 0 ? workerModels : [];
+    return model && !opts.includes(model) ? [...opts, model] : opts;
+  }, [engine, workerModels, model]);
 
   const save = async () => {
     setBusy(true);
@@ -362,24 +424,54 @@ export function SettingsDialog({
           </label>
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-ink">Model</span>
-            <input
-              list="worker-models"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder="e.g. gemini-3.8-flash-high"
-              className="h-10 w-full rounded-md border border-line bg-surface px-3 text-base text-ink placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
-            />
-            <datalist id="worker-models">
-              {workerModels.map((m) => (
-                <option key={m} value={m} />
-              ))}
-            </datalist>
-            <p className="text-xs text-muted">
-              {workerEngine
-                ? `Worker currently runs ${workerEngine} · ${workerModel ?? 'unknown'}. The list below is what ${workerEngine === 'opencode' ? 'OpenCode' : 'the worker'} reported.`
-                : 'Start the worker to fill in the available models.'}
-            </p>
+            {modelOptions.length > 0 ? (
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="h-10 w-full rounded-md border border-line bg-surface px-3 text-base text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+              >
+                {modelOptions.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="e.g. opencode-go/deepseek-v4-flash"
+                className="h-10 w-full rounded-md border border-line bg-surface px-3 text-base text-ink placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+              />
+            )}
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted">
+                {fetching ? 'Fetching models…' : workerModels.length > 0 ? `${workerModels.length} model${workerModels.length === 1 ? '' : 's'} reported by the worker.` : 'No models reported — start the worker or fetch again.'}
+              </p>
+              <button type="button" onClick={fetchModels} disabled={fetching} className="text-xs font-medium text-accent hover:underline disabled:opacity-50">
+                Fetch latest
+              </button>
+            </div>
+            <p className="text-xs text-muted">{fetchNote}</p>
           </label>
+
+          <div className="rounded-md border border-line bg-surface-2 px-3 py-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium text-ink">Connection test</span>
+              <Button variant="secondary" size="sm" onClick={testConnection} loading={testing}>
+                Test connection
+              </Button>
+            </div>
+            <p className="mt-1.5 text-xs text-muted">
+              {testing
+                ? `Asking the ${engine} worker to run ${model} on a one-word prompt…`
+                : testResult
+                  ? testResult.ok
+                    ? `OK — ${engine} responded${testResult.detail ? `: ${testResult.detail}` : ''}`
+                    : `FAILED — ${testResult.detail}`
+                  : "Asks the AI worker to run the selected engine and model once; reports OK or the error."}
+            </p>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

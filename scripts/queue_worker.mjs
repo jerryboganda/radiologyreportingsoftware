@@ -44,7 +44,6 @@ const ENVELOPE_KEYS = ['response', 'result', 'text', 'output', 'content'];
 let job = null; // { id, child } while a case is being processed
 let currentEngine = null;
 let currentModel = null;
-let opencodeModelsCache = null;
 
 const log = (msg) => console.log(`${new Date().toLocaleTimeString()} [worker] ${msg}`);
 
@@ -201,8 +200,8 @@ function killTree(child) {
 function spawnCli(bin, args) {
   // A .cmd/.bat shim needs a shell. These args are fixed strings without quotes or % signs, so plain quoting is safe.
   return /\.(cmd|bat)$/i.test(bin)
-    ? spawn([bin, ...args].map((a) => `"${a}"`).join(' '), { cwd: ROOT, shell: true, windowsHide: true })
-    : spawn(bin, args, { cwd: ROOT, windowsHide: true });
+    ? spawn([bin, ...args].map((a) => `"${a}"`).join(' '), { cwd: ROOT, shell: true, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    : spawn(bin, args, { cwd: ROOT, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
 function runCli(imageRel, fakeResult, argsFor, engine, model) {
@@ -338,22 +337,74 @@ function cleanWorkDir() {
   }
 }
 
-async function listOpencodeModels() {
-  if (opencodeModelsCache) return opencodeModelsCache;
+const MODELS_CACHE_MS = 60_000;
+let opencodeModelsCache = { at: 0, list: null };
+let modelsFetch = null; // the one in-flight `opencode models` run, shared by the heartbeat and the main loop
+
+const modelsStale = () => !opencodeModelsCache.list || Date.now() - opencodeModelsCache.at >= MODELS_CACHE_MS;
+
+/** Runs `opencode models` and updates the cache; concurrent callers share one run. */
+function refreshOpencodeModels() {
+  modelsFetch ??= (async () => {
+    try {
+      const bin = engineBin('opencode');
+      const out = await new Promise((resolve, reject) => {
+        const child = spawnCli(bin, ['models']);
+        let stdout = '';
+        child.stdout.setEncoding('utf8').on('data', (d) => (stdout += d));
+        child.on('error', reject);
+        child.on('close', (code) => (code === 0 ? resolve(stdout) : reject(new Error(`models exited ${code}`))));
+      });
+      opencodeModelsCache = { at: Date.now(), list: out.split(/\r?\n/).map((l) => l.trim()).filter((l) => /^\S+\/\S+/.test(l)) };
+    } catch {
+      opencodeModelsCache = { at: Date.now(), list: [] };
+    } finally {
+      modelsFetch = null;
+    }
+  })();
+  return modelsFetch;
+}
+
+async function listOpencodeModels(force = false) {
+  if (!force && !modelsStale()) return opencodeModelsCache.list;
+  await refreshOpencodeModels();
+  return opencodeModelsCache.list;
+}
+
+/** The engine self-test from the Settings dialog: run the CLI on a one-word prompt. */
+async function testEngine(engine, model) {
+  const bin = engineBin(engine);
+  const args =
+    engine === 'opencode'
+      ? ['run', '--format', 'json', '-m', model, 'Reply with the single word OK. Do not write any other text.']
+      : ['-p', 'Reply with the single word OK. Do not write any other text.', '--model', model, '--output-format', 'json'];
   try {
-    const bin = engineBin('opencode');
-    const out = await new Promise((resolve, reject) => {
-      const child = spawnCli(bin, ['models']);
+    const stdout = await new Promise((resolve, reject) => {
+      const child = spawnCli(bin, args);
       let stdout = '';
+      let stderr = '';
+      let timedOut = false;
       child.stdout.setEncoding('utf8').on('data', (d) => (stdout += d));
-      child.on('error', reject);
-      child.on('close', (code) => (code === 0 ? resolve(stdout) : reject(new Error(`models exited ${code}`))));
+      child.stderr.setEncoding('utf8').on('data', (d) => (stderr += d));
+      const timer = setTimeout(() => {
+        timedOut = true;
+        killTree(child);
+      }, 120_000);
+      child.on('error', (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        if (timedOut) reject(new Error(`${engine} test timed out after 2 min`));
+        else if (code !== 0) reject(new Error(`${engine} exited with code ${code}: ${stderr.trim().slice(-300)}`));
+        else resolve(stdout);
+      });
     });
-    opencodeModelsCache = out.split(/\r?\n/).map((l) => l.trim()).filter((l) => /^\S+\/\S+/.test(l));
-  } catch {
-    opencodeModelsCache = [];
+    return { ok: /\bOK\b/i.test(stdout) || stdout.length > 10, detail: /\bOK\b/i.test(stdout) ? '' : stdout.trim().slice(-200) };
+  } catch (err) {
+    return { ok: false, detail: String(err?.message || err).slice(0, 300) };
   }
-  return opencodeModelsCache;
 }
 
 async function runJob(report) {
@@ -402,16 +453,41 @@ async function main() {
   fs.mkdirSync(WORK_DIR, { recursive: true });
   cleanWorkDir();
 
-  const heartbeat = () =>
-    listOpencodeModels()
-      .catch(() => [])
-      .then((models) => post({ action: 'heartbeat', busy: Boolean(job), engine: currentEngine, model: currentModel, models }))
-      .catch(() => {});
+  // Queued actions handed over by /api/queue's heartbeat reply, execution started in the main loop.
+  let testToRun = null;
+  let needModelFetch = false;
+  const heartbeat = async () => {
+    try {
+      // The beat must never wait on the model CLI: a slow `opencode models` is refreshed in
+      // the background, and a delayed heartbeat reads as "AI engine offline" in the app.
+      if (modelsStale()) refreshOpencodeModels().catch(() => {});
+      const body = await post({ action: 'heartbeat', busy: Boolean(job) || Boolean(testToRun), engine: currentEngine, model: currentModel, models: opencodeModelsCache.list ?? [] });
+      if (body?.test && !job && !testToRun) testToRun = body.test;
+      if (body?.refreshModels) needModelFetch = true;
+    } catch {}
+  };
+  refreshOpencodeModels().catch(() => {}); // warm the model list without delaying the first beat
   heartbeat();
   setInterval(heartbeat, 5000);
 
   let lastProblem = '';
   for (;;) {
+    if (needModelFetch) {
+      needModelFetch = false;
+      opencodeModelsCache.at = 0; // expire so the next heartbeat re-runs `opencode models`
+      log('refreshing the model list');
+      await listOpencodeModels(true).catch(() => {});
+    }
+    if (testToRun) {
+      const t = testToRun;
+      testToRun = null;
+      log(`testing ${t.engine} with ${t.model}`);
+      const result = await testEngine(t.engine, t.model);
+      log(`test ${result.ok ? 'OK' : 'FAILED'}: ${result.detail.split('\n')[0].slice(0, 120)}`);
+      await post({ action: 'test_result', engine: t.engine, model: t.model, ok: result.ok, detail: result.detail }).catch((e) => log(`could not record the test: ${e.message}`));
+      continue;
+    }
+
     // Engine/model follow the app Settings unless AI_ENGINE / AI_MODEL force them.
     const settings = await readSettings();
     const { engine, model } = resolveEngineModel(settings);
