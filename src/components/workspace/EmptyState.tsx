@@ -7,7 +7,7 @@ import { Button } from '../ui/button';
 const imagesFrom = (list: FileList | null | undefined) => Array.from(list ?? []).filter((f) => f.type.startsWith('image/'));
 
 /** First run: what the product does, in its own pictures, and the two ways to start. */
-export function EmptyState({ onFiles, onSyncInput }: { onFiles: (files: File[]) => Promise<void>; onSyncInput: () => Promise<void> }) {
+export function EmptyState({ onFiles, onSyncInput, aiLabel }: { onFiles: (files: File[]) => Promise<void>; onSyncInput: () => Promise<void>; aiLabel: string }) {
   const [syncing, setSyncing] = useState(false);
   const pick = (e: ChangeEvent<HTMLInputElement>) => {
     void onFiles(imagesFrom(e.target.files));
@@ -20,11 +20,11 @@ export function EmptyState({ onFiles, onSyncInput }: { onFiles: (files: File[]) 
         <NoteToReport className="mx-auto mb-8 w-full max-w-[22rem]" />
         <h2 className="text-2xl font-semibold tracking-[-0.02em] text-ink sm:text-3xl">Start with a photo of the senior’s note</h2>
         <p className="mx-auto mt-3 max-w-[34rem] text-md leading-relaxed text-muted">
-          Gemini 3.8 Flash reads the handwritten positives and drafts a complete report under AGENTS.md. You check it beside the note, then issue the PDF.
+          {aiLabel} reads the handwritten positives and drafts a complete report under AGENTS.md. You check it beside the note, then issue the PDF.
         </p>
 
         <ol className="mx-auto mt-7 flex max-w-lg flex-col gap-3 text-left text-base text-ink-2 sm:flex-row sm:gap-6">
-          {['Photograph or drop the note', 'Gemini drafts the report', 'Verify and issue the PDF'].map((step, i) => (
+          {['Photograph or drop the note', 'The AI drafts the report', 'Verify and issue the PDF'].map((step, i) => (
             <li key={step} className="flex flex-1 items-start gap-2.5">
               <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-xs font-bold text-on-accent">{i + 1}</span>
               <span className="pt-0.5 leading-snug">{step}</span>

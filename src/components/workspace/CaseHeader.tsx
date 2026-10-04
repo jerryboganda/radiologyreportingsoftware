@@ -33,12 +33,12 @@ export interface AiAction {
 }
 
 /** The one AI action that makes sense for the case's current state, if any. */
-export function aiActionFor(r: ReportItem): AiAction | null {
+export function aiActionFor(r: ReportItem, aiLabel: string): AiAction | null {
   if (r.isArchived) return null;
   switch (r.status) {
     case 'DRAFT':
       return isBlankDraft(r)
-        ? { label: 'Generate with AI', icon: <Sparkles />, hint: 'Send this note to Gemini 3.8 Flash' }
+        ? { label: 'Generate with AI', icon: <Sparkles />, hint: `Send this note to ${aiLabel}` }
         : { label: 'Regenerate', icon: <Sparkles />, hint: 'Ask the AI to draft this report again' };
     case 'BLOCKED':
       return { label: 'Re-queue', icon: <RotateCcw />, hint: 'Send back to the AI with your notes' };
@@ -62,12 +62,14 @@ interface CaseHeaderProps {
   onAi: () => void;
   onAudit: () => void;
   onAction: (action: CaseAction) => void;
+  /** The model actually running, named in the Generate with AI tooltip. */
+  aiLabel: string;
   /** The draft has wording the senior never wrote that the resident has not confirmed. */
   wordingPending: boolean;
 }
 
-export function CaseHeader({ report: r, saveState, onSaveNow, leading, focusMode, onToggleFocus, canApprove, approveHint, onApprove, onAi, onAudit, onAction, wordingPending }: CaseHeaderProps) {
-  const ai = aiActionFor(r);
+export function CaseHeader({ report: r, saveState, onSaveNow, leading, focusMode, onToggleFocus, canApprove, approveHint, onApprove, onAi, onAudit, onAction, aiLabel, wordingPending }: CaseHeaderProps) {
+  const ai = aiActionFor(r, aiLabel);
   const finalized = r.status === 'FINALIZED';
   const details = ageSex(r);
   const printHref = `/print/${r.id}`;

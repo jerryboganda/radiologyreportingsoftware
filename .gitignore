@@ -16,6 +16,9 @@ dist/
 output/
 .ui-check/
 
+# Scratch data for the isolated API contract check (never real data)
+.api-check/
+
 # Local database backups (patient data)
 data/*.bak*
 

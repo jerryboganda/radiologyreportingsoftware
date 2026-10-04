@@ -2,6 +2,7 @@ import { useState, type ChangeEvent, type ReactNode, type RefObject } from 'reac
 import { AnimatePresence, motion } from 'motion/react';
 import { Archive, ArchiveRestore, Camera, FolderSync, Inbox, Keyboard, Monitor, Moon, PanelLeftClose, RotateCcw, Search, Settings, Sun, Upload, X } from 'lucide-react';
 import type { ReportItem } from '../../lib/report';
+import { aiModelLabel } from '../../lib/aiModel';
 import { cn } from '../../lib/cn';
 import { Button, Kbd } from '../ui/button';
 import { IconButton, Tooltip } from '../ui/overlay';
@@ -44,6 +45,8 @@ interface QueueSidebarProps {
   flaggedIds: ReadonlySet<string>;
   engineOnline: boolean;
   engineBusy: boolean;
+  /** The worker's live engine and model; the row names them as the app does everywhere else. */
+  engineEngine: string | null;
   engineModel: string | null;
   onOpenSettings: () => void;
   onIngest: (files: File[]) => Promise<void>;
@@ -86,7 +89,7 @@ export function QueueSidebar(props: QueueSidebarProps) {
             </BusyButton>
           )}
         </div>
-        <EngineStatus online={props.engineOnline} busy={props.engineBusy} model={props.engineModel} onOpenSettings={props.onOpenSettings} />
+        <EngineStatus online={props.engineOnline} busy={props.engineBusy} engine={props.engineEngine} model={props.engineModel} onOpenSettings={props.onOpenSettings} />
       </div>
 
       <div className="space-y-2.5 px-3 pb-1 pt-3">
@@ -344,7 +347,7 @@ function BusyButton({
   return tooltip ? <Tooltip content={tooltip}>{button}</Tooltip> : button;
 }
 
-function EngineStatus({ online, busy, model, onOpenSettings }: { online: boolean; busy: boolean; model: string | null; onOpenSettings: () => void }) {
+function EngineStatus({ online, busy, engine, model, onOpenSettings }: { online: boolean; busy: boolean; engine: string | null; model: string | null; onOpenSettings: () => void }) {
   return (
     <Tooltip
       side="right"
@@ -357,7 +360,7 @@ function EngineStatus({ online, busy, model, onOpenSettings }: { online: boolean
         </span>
         <span className="min-w-0 flex-1 truncate">
           {online ? (busy ? 'AI engine working' : 'AI engine online') : 'AI engine offline'}
-          <span className="text-faint"> · {model ?? 'not set'}</span>
+          <span className="text-faint"> · {aiModelLabel({ engineEngine: engine, engineModel: model })}</span>
         </span>
         <IconButton label="AI settings" size="icon-sm" variant="ghost" onClick={onOpenSettings} className="-my-1">
           <Settings className="h-3.5 w-3.5" />

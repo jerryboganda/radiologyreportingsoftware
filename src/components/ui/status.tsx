@@ -14,7 +14,7 @@ interface StatusMeta {
 // One colour per state everywhere; red is reserved for failure (and the urgent box).
 export const STATUS_META: Record<ReportStatus, StatusMeta> = {
   QUEUED: { label: 'Queued', description: 'Waiting for the AI engine', chip: 'bg-accent-soft text-accent' },
-  PROCESSING: { label: 'Generating', description: 'Gemini is reading the note', chip: 'bg-accent-soft text-accent', icon: LoaderCircle },
+  PROCESSING: { label: 'Generating', description: 'The AI is reading the note', chip: 'bg-accent-soft text-accent', icon: LoaderCircle },
   DRAFT: { label: 'Draft', description: 'Ready for your review', chip: 'bg-surface-3 text-ink-2', icon: PenLine },
   BLOCKED: { label: 'Blocked', description: 'The AI needs a clarification', chip: 'bg-warning-soft text-warning', icon: MessageCircleQuestion },
   FAILED: { label: 'Failed', description: 'Generation failed', chip: 'bg-danger-soft text-danger', icon: TriangleAlert },

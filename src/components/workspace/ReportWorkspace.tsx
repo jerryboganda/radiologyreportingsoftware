@@ -5,6 +5,7 @@ import { Group, Panel, Separator, useDefaultLayout, usePanelRef, type LayoutStor
 import { Download, FileText, Image as ImageIcon, Menu as MenuIcon, PanelLeftOpen, RefreshCw, TriangleAlert } from 'lucide-react';
 import { hasReportBody, isLocked, type ReportItem, type ReportStatus } from '../../lib/report';
 import { checkWording, wordingSignature } from '../../lib/wording';
+import { aiCopy, aiModelLabel } from '../../lib/aiModel';
 import { cn } from '../../lib/cn';
 import { Button } from '../ui/button';
 import { ConfirmDialog, Dialog, IconButton, SheetContent, TooltipProvider } from '../ui/overlay';
@@ -95,6 +96,13 @@ function approveState(r: ReportItem): { can: boolean; hint: string } {
 function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }) {
   const api = useReports();
   const { reports, draft, selectedId } = api;
+  // What the reporting PC is really running: the worker heartbeat, so no model name is hardcoded here.
+  const aiState = useMemo(
+    () => ({ engineOnline: api.engineOnline, engineBusy: api.engineBusy, engineEngine: api.engineEngine, engineModel: api.engineModel }),
+    [api.engineOnline, api.engineBusy, api.engineEngine, api.engineModel],
+  );
+  const aiLabel = aiModelLabel(aiState);
+  const aiReading = aiCopy(aiLabel).named.reading;
 
   const [view, setView] = useState<QueueView>('active');
   const [query, setQuery] = useState('');
@@ -292,6 +300,7 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
     flaggedIds,
     engineOnline: api.engineOnline,
     engineBusy: api.engineBusy,
+    engineEngine: api.engineEngine,
     engineModel: api.engineModel,
     onOpenSettings: () => setSettingsOpen(true),
     onIngest: api.ingest,
@@ -311,7 +320,7 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
   const approve = draft ? approveState(draft) : { can: false, hint: '' };
   const readOnly = !draft || isLocked(draft.status) || !!draft.isArchived;
   const reading = draft?.status === 'PROCESSING';
-  const ai = draft ? aiActionFor(draft) : null;
+  const aiAction = draft ? aiActionFor(draft, aiLabel) : null;
 
   const leading = isDesktop ? (
     !sidebarOpen && (
@@ -330,7 +339,7 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
       key={`${draft.id}:${develop.id === draft.id ? develop.n : 0}`}
       report={draft}
       readOnly={readOnly}
-      engineOnline={api.engineOnline}
+      ai={aiState}
       developing={develop.live && develop.id === draft.id}
       flags={flags}
       wordingConfirmed={wordingConfirmed}
@@ -344,7 +353,7 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
   );
 
   const noteViewer = draft && (
-    <NoteViewer report={draft} reading={reading} readingLabel={!isDesktop} onReplace={api.replaceImage} className={isDesktop ? undefined : 'absolute inset-0'} />
+    <NoteViewer report={draft} reading={reading} readingLabel={!isDesktop} readingModel={aiReading} onReplace={api.replaceImage} className={isDesktop ? undefined : 'absolute inset-0'} />
   );
 
   // Phones/tablets keep a top bar (brand + case list) even when no case is open.
@@ -368,7 +377,7 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
       <>
         {mobileBar}
         <div className="min-h-0 flex-1">
-          {reports.length === 0 ? <EmptyState onFiles={api.ingest} onSyncInput={api.syncInput} /> : <NoSelection onOpenList={isDesktop ? undefined : () => setDrawerOpen(true)} />}
+          {reports.length === 0 ? <EmptyState onFiles={api.ingest} onSyncInput={api.syncInput} aiLabel={aiLabel} /> : <NoSelection onOpenList={isDesktop ? undefined : () => setDrawerOpen(true)} />}
         </div>
       </>
     );
@@ -389,6 +398,7 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
           onAi={() => void runAi(draft.id)}
           onAudit={() => setAuditOpen(true)}
           onAction={(a) => void onAction(a)}
+          aiLabel={aiLabel}
         />
         {isDesktop ? (
           <Group id="workspace-split" orientation="horizontal" defaultLayout={layout.defaultLayout} onLayoutChanged={layout.onLayoutChanged} className="min-h-0 flex-1">
@@ -427,10 +437,10 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
             </div>
             <div className="relative min-h-0 flex-1">{mobileTab === 'note' ? noteViewer : reportPane}</div>
             <div className="flex shrink-0 items-center gap-2 border-t border-line bg-surface px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:hidden">
-              {ai && (
+              {aiAction && (
                 <Button size="lg" className="flex-1 px-3" onClick={() => void runAi(draft.id)}>
-                  {ai.icon}
-                  {ai.label}
+                  {aiAction.icon}
+                  {aiAction.label}
                 </Button>
               )}
               <Button size="lg" variant="primary" className="flex-[1.6] px-3" disabled={!approve.can} onClick={onApprove}>
@@ -469,7 +479,7 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
       <main className="flex min-w-0 flex-1 flex-col">{main}</main>
 
       <DropOverlay onFiles={api.ingest} />
-      <AuditDialog report={draft} open={auditOpen} onOpenChange={setAuditOpen} flags={flags} wordingConfirmed={wordingConfirmed} />
+      <AuditDialog report={draft} open={auditOpen} onOpenChange={setAuditOpen} flags={flags} wordingConfirmed={wordingConfirmed} aiLabel={aiLabel} />
       <ApproveDialog
         report={draft}
         open={approveOpen}

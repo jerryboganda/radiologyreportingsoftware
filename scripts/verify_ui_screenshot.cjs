@@ -9,6 +9,17 @@ const puppeteer = require('puppeteer-core');
 
 const BASE = (process.argv[2] || 'http://127.0.0.1:4321').replace(/\/$/, '');
 const OUT = path.resolve(process.argv[3] || path.join(__dirname, '..', '.ui-check'));
+// The AI banners must name the model the worker reports, never a hardcoded one.
+const WORKER_ENGINE = process.env.AI_ENGINE || 'opencode';
+const WORKER_MODEL = process.env.AI_MODEL || 'deepseek-v4.1-flash';
+const localName = (id) =>
+  id
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((w) => (['ai', 'gpt', 'glm', 'mimo'].includes(w.toLowerCase()) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(' ');
+// Replaced by the app's own helper (src/lib/aiModel.ts) once the run starts.
+let workerName = localName(WORKER_MODEL);
 const CHROME = [
   process.env.CHROME_PATH,
   '/usr/bin/chromium',
@@ -163,6 +174,13 @@ async function run() {
   } catch (e) {
     console.log('(skipping the confirmed-wording scenario: could not load src/lib/wording.ts: ' + e.message + ')');
   }
+  // The label the app is expected to derive from the worker heartbeat, from the app's own helper.
+  try {
+    const m = await import('../src/lib/aiModel.ts');
+    workerName = m.aiModelLabel({ engineEngine: WORKER_ENGINE, engineModel: WORKER_MODEL });
+  } catch (e) {
+    console.log('(using the local label fallback: could not load src/lib/aiModel.ts: ' + e.message + ')');
+  }
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--hide-scrollbars'] });
   const failures = [];
 
@@ -182,7 +200,15 @@ async function run() {
       const url = new URL(req.url());
       const json = (status, body) => req.respond({ status, contentType: 'application/json', body: JSON.stringify(body) });
       if (url.pathname === '/api/reports' && req.method() === 'GET') return json(200, s.list);
-      if (url.pathname === '/api/queue' && req.method() === 'GET') return json(200, { workerLastSeen: s.online ? Date.now() : null, workerBusy: !!s.busy });
+      if (url.pathname === '/api/queue' && req.method() === 'GET')
+        return json(200, {
+          workerLastSeen: s.online ? Date.now() : null,
+          workerBusy: !!s.busy,
+          workerEngine: WORKER_ENGINE,
+          workerModel: WORKER_MODEL,
+          workerModels: [WORKER_MODEL, 'glm-5.3-flash', 'gpt-6-luna'],
+          workerModelVariants: {},
+        });
       if (url.pathname.startsWith('/api/') || req.method() !== 'GET') return json(409, { error: 'UI verification run: writes are disabled' });
       if (url.pathname.startsWith('/uploads/')) return req.respond({ status: 404, body: '' }); // never load real note photos
       return req.continue();
@@ -206,7 +232,11 @@ async function run() {
       const clipped = controls.filter((el) => el.scrollWidth > el.clientWidth + 1 || el.getBoundingClientRect().height > 46).map((el) => el.getAttribute('aria-label') || el.textContent.trim().slice(0, 30));
       const unnamed = [...document.querySelectorAll('button, a[href]')].filter((el) => visible(el) && !el.textContent.trim() && !el.getAttribute('aria-label')).map((el) => el.outerHTML.slice(0, 80));
       const text = document.body.innerText;
+      // The rows and banners that name the model (the sidebar engine row + the state banner).
+      const named = [...document.querySelectorAll('[role="status"], [role="alert"]')].map((el) => el.innerText).join('\n');
       return {
+        text,
+        named,
         overflowX: document.documentElement.scrollWidth - window.innerWidth,
         clipped,
         unnamed,
@@ -230,6 +260,10 @@ async function run() {
       s.confirmed && !m.confirmedNote && 'confirmed wording is not acknowledged on screen',
       s.confirmed && m.ringed > 0 && 'confirmed wording is still ringed',
       s.step === 'approve' && s.flagged && !m.approveBox && 'the approve dialog has no wording confirmation',
+      // The AI banners must name the model the worker heartbeat reports, never a hardcoded one.
+      (s.name.startsWith('queued-') || s.name.startsWith('processing-')) && !m.named.includes(workerName) && `the banner does not name the live model (${workerName})`,
+      // Nothing on screen may claim that a different model is reading or queued (error text may quote any engine).
+      s.online && /is reading the note|will pick this note up/i.test(m.named) && !m.named.includes(workerName) && `a model other than the live one (${workerName}) is said to be working: ${m.named.slice(0, 120)}`,
     ].filter(Boolean);
     console.log(`${problems.length ? '✗' : '✓'} ${s.name}${problems.length ? ' — ' + problems.join('; ') : ''}`);
     if (problems.length) failures.push(s.name);

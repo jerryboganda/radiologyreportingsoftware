@@ -15,6 +15,7 @@ export function NoteViewer({
   report,
   reading,
   readingLabel,
+  readingModel,
   onReplace,
   className,
 }: {
@@ -23,6 +24,8 @@ export function NoteViewer({
   reading: boolean;
   /** Also say so in words (when the report pane's banner isn't on screen, i.e. the phone's Note tab). */
   readingLabel?: boolean;
+  /** The model actually running, already phrased ("DeepSeek V4.1 Flash is reading the note"). */
+  readingModel: string;
   onReplace: (file: File) => Promise<void>;
   className?: string;
 }) {
@@ -88,7 +91,7 @@ export function NoteViewer({
         ) : (
           <ZoomableNote key={src} src={src} reading={reading} rotation={rotation} onRotate={() => setRotation((r) => (r + 90) % 360)} onError={() => setBroken(true)} />
         )}
-        {reading && readingLabel && <ReadingLabel />}
+        {reading && readingLabel && <ReadingLabel label={readingModel} />}
       </div>
     </section>
   );
@@ -221,11 +224,11 @@ function MissingSource({ onPick }: { onPick: (e: ChangeEvent<HTMLInputElement>) 
 }
 
 /** Words for the reading state where the report pane's banner is out of view (phone Note tab). */
-function ReadingLabel() {
+function ReadingLabel({ label }: { label: string }) {
   return (
     <div role="status" className="pointer-events-none absolute left-1/2 top-4 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-white/10 bg-[#0c121c]/95 px-3 py-1.5 text-xs font-medium text-slate-200 shadow-lg">
       <LoaderCircle className="h-3.5 w-3.5 animate-spin text-[#7da4fa]" aria-hidden />
-      Gemini 3.8 Flash is reading the note
+      {label}
     </div>
   );
 }

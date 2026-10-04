@@ -19,6 +19,7 @@ import {
 import { isBlankDraft, type ReportItem, type ReportPatch } from '../../lib/report';
 import type { InstitutionProfile } from '../../lib/institution';
 import type { WordingFlag } from '../../lib/wording';
+import { aiCopy, aiModelLabel, type AiModelState } from '../../lib/aiModel';
 import { cn } from '../../lib/cn';
 import { AutoTextarea } from '../ui/auto-textarea';
 import { Button } from '../ui/button';
@@ -31,7 +32,8 @@ const SECTION_LABELS: Record<SectionId, string> = { patient: 'Patient', techniqu
 interface ReportPaneProps {
   report: ReportItem;
   readOnly: boolean;
-  engineOnline: boolean;
+  /** The live worker state: the banner names the model that is actually running (lib/aiModel.ts). */
+  ai: AiModelState;
   developing: boolean;
   onPatch: (patch: ReportPatch) => void;
   /** Letterhead / sign-off edits, applied to this case and to every case created later. */
@@ -47,7 +49,7 @@ interface ReportPaneProps {
 }
 
 /** Right-hand pane: section navigation, the state banner, the report sheet and the (unprinted) notes for the AI. */
-export function ReportPane({ report: r, readOnly, engineOnline, developing, onPatch, onProfile, onAi, onDequeue, onReopen, onDownload, flags, wordingConfirmed }: ReportPaneProps) {
+export function ReportPane({ report: r, readOnly, ai, developing, onPatch, onProfile, onAi, onDequeue, onReopen, onDownload, flags, wordingConfirmed }: ReportPaneProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const [active, setActive] = useState<SectionId>('patient');
@@ -140,7 +142,7 @@ export function ReportPane({ report: r, readOnly, engineOnline, developing, onPa
         <StatusBanner
           key={`${r.status}:${r.isArchived}`}
           report={r}
-          engineOnline={engineOnline}
+          ai={ai}
           onAi={onAi}
           onDequeue={onDequeue}
           onReopen={onReopen}
@@ -218,7 +220,7 @@ function WordingBanner({ flags, confirmed, onSelect }: { flags: WordingFlag[]; c
 
 function StatusBanner({
   report: r,
-  engineOnline,
+  ai,
   onAi,
   onDequeue,
   onReopen,
@@ -226,7 +228,7 @@ function StatusBanner({
   onWriteNotes,
 }: {
   report: ReportItem;
-  engineOnline: boolean;
+  ai: AiModelState;
   onAi: () => void;
   onDequeue: () => void;
   onReopen: () => void;
@@ -240,6 +242,10 @@ function StatusBanner({
     return () => window.clearInterval(id);
   }, [r.status]);
 
+  // The model the reporting PC is running now; falls back to a neutral phrase before the first heartbeat.
+  const copy = aiCopy(aiModelLabel(ai));
+  const engineOnline = ai.engineOnline;
+
   if (r.isArchived) {
     return <Banner tone="neutral" icon={<History />} title="Archived" body="This case is out of the active list. Its data and photo are kept; restore it from the ⋯ menu." />;
   }
@@ -247,7 +253,7 @@ function StatusBanner({
   switch (r.status) {
     case 'QUEUED':
       return engineOnline ? (
-        <Banner tone="info" icon={<LoaderCircle className="motion-safe:animate-spin" />} title="Queued for the AI" body="Gemini 3.8 Flash will pick this note up in a moment. The report fills in here when it’s ready." />
+        <Banner tone="info" icon={<LoaderCircle className="motion-safe:animate-spin" />} title="Queued for the AI" body={copy.named.queued} />
       ) : (
         <Banner
           tone="warning"
@@ -266,7 +272,7 @@ function StatusBanner({
         <Banner
           tone="info"
           icon={<LoaderCircle className="motion-safe:animate-spin" />}
-          title="Gemini 3.8 Flash is reading the note"
+          title={copy.named.reading}
           body="Transcribing, building the finding ledger and running the AGENTS.md final audit. This usually takes a few minutes."
           aside={<span className="font-semibold tabular-nums text-accent">{elapsed(r.updatedAt)}</span>}
         />
@@ -341,7 +347,7 @@ function StatusBanner({
             tone="neutral"
             icon={<Sparkles />}
             title="No report yet"
-            body="Let Gemini 3.8 Flash draft it from the note, or start writing below."
+            body={copy.named.noReport}
             action={<Button size="sm" variant="primary" onClick={onAi}><Sparkles className="h-4 w-4" />Generate with AI</Button>}
           />
         );
@@ -372,7 +378,7 @@ function Banner({ tone, icon, title, body, action, aside }: { tone: keyof typeof
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-3">
-          <p className="text-base font-semibold text-ink">{title}</p>
+          <p className="min-w-0 text-base font-semibold text-ink">{title}</p>
           {aside}
         </div>
         <div className="mt-0.5 text-sm leading-relaxed">{body}</div>
