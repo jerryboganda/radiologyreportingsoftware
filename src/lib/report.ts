@@ -49,6 +49,8 @@ export interface ReportItem {
   ownerNotes: string | null;
   /** Signature of the flagged wording the resident confirmed (lib/wording.ts); null when nothing was confirmed. */
   wordingAck: string | null;
+  /** The letterhead / sign-off profile this case prints with, snapshotted at creation. */
+  institutionJson: string | null;
   /** ISO strings once JSON-serialised by the API. */
   createdAt: string;
   updatedAt: string;
@@ -75,6 +77,7 @@ export const EDITABLE_FIELDS = [
   'urgentCallLog',
   'ownerNotes',
   'imagePath',
+  'institutionJson',
 ] as const satisfies readonly (keyof ReportItem)[];
 
 export type EditableField = (typeof EDITABLE_FIELDS)[number];

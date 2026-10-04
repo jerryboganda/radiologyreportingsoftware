@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { EDITABLE_FIELDS, isLocked, type ReportItem, type ReportPatch } from '../../lib/report';
+import { profileFromSnapshot, sanitizeProfile, type InstitutionProfile } from '../../lib/institution';
 
 export type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 export type CaseAction = 'archive' | 'restore' | 'reopen' | 'dequeue' | 'ack_wording';
@@ -44,12 +45,13 @@ export function useReports() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ReportItem | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
-  const [engine, setEngine] = useState<{ lastSeen: number | null; busy: boolean; engine: string | null; model: string | null; models: string[] }>({
+  const [engine, setEngine] = useState<{ lastSeen: number | null; busy: boolean; engine: string | null; model: string | null; models: string[]; modelVariants: Record<string, string[]> }>({
     lastSeen: null,
     busy: false,
     engine: null,
     model: null,
     models: [],
+    modelVariants: {},
   });
 
   // Refs mirror state for async work (poll, debounced save) so callbacks never act on stale values.
@@ -97,13 +99,13 @@ export function useReports() {
     try {
       const [list, queue] = await Promise.all([
         api<ReportItem[]>('/api/reports'),
-        api<{ workerLastSeen: number | null; workerBusy: boolean; workerEngine: string | null; workerModel: string | null; workerModels: string[] }>('/api/queue').catch(() => null),
+        api<{ workerLastSeen: number | null; workerBusy: boolean; workerEngine: string | null; workerModel: string | null; workerModels: string[]; workerModelVariants?: Record<string, string[]> }>('/api/queue').catch(() => null),
       ]);
       reportsRef.current = list;
       setReports(list);
       setLoaded(true);
       setLoadError(null);
-      if (queue) setEngine({ lastSeen: queue.workerLastSeen, busy: queue.workerBusy, engine: queue.workerEngine, model: queue.workerModel, models: queue.workerModels ?? [] });
+      if (queue) setEngine({ lastSeen: queue.workerLastSeen, busy: queue.workerBusy, engine: queue.workerEngine, model: queue.workerModel, models: queue.workerModels ?? [], modelVariants: queue.workerModelVariants ?? {} });
       const current = list.find((r) => r.id === selectedRef.current);
       if (current) adopt(current);
     } catch (error) {
@@ -186,6 +188,55 @@ export function useReports() {
       timer.current = window.setTimeout(() => void save(), AUTOSAVE_MS);
     },
     [save],
+  );
+
+  /**
+   * Letterhead / sign-off edit: autosaved onto the open case and, at the same time, into the stored
+   * profile every case created from now on prints with. Two writes, one debounce; the case wins.
+   */
+  const profileTimer = useRef<number | undefined>(undefined);
+  const pendingProfile = useRef<InstitutionProfile | null>(null);
+  const profileSeq = useRef(0);
+
+  const writeProfile = useCallback(async (profile: InstitutionProfile) => {
+    const local = draftRef.current;
+    const encoded = JSON.stringify(profile);
+    const caseWrite = local && !isLocked(local.status)
+      ? postJson<ReportItem>('/api/reports', { id: local.id, institutionJson: encoded }).catch((error) => {
+          toast.error('Couldn’t save the sign-off', { description: (error as Error).message });
+          return null;
+        })
+      : Promise.resolve(null);
+    const settingWrite = postJson<{ institution: InstitutionProfile }>('/api/settings', { institution: profile }).catch((error) => {
+      toast.error('Couldn’t save the sign-off profile', { description: (error as Error).message });
+    });
+    const [row] = await Promise.all([caseWrite, settingWrite]);
+    if (row) {
+      setReportsBoth((list) => list.map((r) => (r.id === row.id ? row : r)));
+      if (row.id === selectedRef.current) {
+        baseRef.current = row;
+        // A poll may have replaced the draft meanwhile; only the profile half is adopted.
+        setDraftBoth({ ...(draftRef.current ?? row), institutionJson: row.institutionJson });
+      }
+    }
+  }, []);
+
+  const updateInstitution = useCallback(
+    (patch: Partial<InstitutionProfile>) => {
+      const local = draftRef.current;
+      if (!local || isLocked(local.status)) return;
+      const current = pendingProfile.current ?? profileFromSnapshot(local.institutionJson);
+      const next = sanitizeProfile({ ...current, ...patch });
+      pendingProfile.current = next;
+      setDraftBoth({ ...local, institutionJson: JSON.stringify(next) });
+      const seq = ++profileSeq.current;
+      window.clearTimeout(profileTimer.current);
+      profileTimer.current = window.setTimeout(() => {
+        pendingProfile.current = null;
+        if (profileSeq.current === seq) void writeProfile(next);
+      }, AUTOSAVE_MS);
+    },
+    [writeProfile],
   );
 
   /* ---------- selection ---------- */
@@ -393,10 +444,12 @@ export function useReports() {
     engineEngine: engine.engine,
     engineModel: engine.model,
     engineModels: engine.models,
+    engineModelVariants: engine.modelVariants,
     counts,
     refresh,
     select,
     update,
+    updateInstitution,
     save,
     flush,
     ingest,

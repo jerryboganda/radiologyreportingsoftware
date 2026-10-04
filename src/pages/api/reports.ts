@@ -4,6 +4,7 @@ import { reports, type NewReport } from '../../db/schema';
 import { desc, eq, notInArray } from 'drizzle-orm';
 import { LOCKED_STATUSES, findingsToMarkdown, parseFindings, pickEditable } from '../../lib/report';
 import { guardedUpdate } from '../../lib/ingest';
+import { sanitizeProfile } from '../../lib/institution';
 import { checkWording, wordingSignature } from '../../lib/wording';
 
 /** Archive/restore flip only the flag; reopen and dequeue move one specific status back to DRAFT. */
@@ -30,6 +31,16 @@ function strictFindings(json: string) {
     const parsed = JSON.parse(json);
     const sections = parseFindings(json);
     return Array.isArray(parsed) && sections.length === parsed.length ? sections : null;
+  } catch {
+    return null;
+  }
+}
+
+/** JSON.parse that returns undefined instead of throwing; null means it was not an object. */
+function safeParse(json: string): unknown {
+  try {
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === 'object' ? parsed : null;
   } catch {
     return null;
   }
@@ -76,6 +87,12 @@ export const POST: APIRoute = async ({ request }) => {
         return Response.json({ error: 'findingsJson must be [{title, items:[{structure, content}]}]' }, { status: 400 });
       }
       patch.findingsMarkdown = findingsToMarkdown(sections);
+    }
+    // The letterhead / sign-off profile a case prints with: only ever a sanitised, complete profile.
+    if (patch.institutionJson !== undefined) {
+      const parsed = typeof patch.institutionJson === 'string' ? safeParse(patch.institutionJson) : null;
+      if (!parsed) return Response.json({ error: 'Invalid value for institutionJson' }, { status: 400 });
+      patch.institutionJson = JSON.stringify(sanitizeProfile(parsed));
     }
     return guardedUpdate(id, patch, notInArray(reports.status, [...LOCKED_STATUSES]));
   } catch (error: any) {

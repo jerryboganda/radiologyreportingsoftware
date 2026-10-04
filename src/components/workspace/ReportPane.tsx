@@ -17,6 +17,7 @@ import {
   WifiOff,
 } from 'lucide-react';
 import { isBlankDraft, type ReportItem, type ReportPatch } from '../../lib/report';
+import type { InstitutionProfile } from '../../lib/institution';
 import type { WordingFlag } from '../../lib/wording';
 import { cn } from '../../lib/cn';
 import { AutoTextarea } from '../ui/auto-textarea';
@@ -33,6 +34,8 @@ interface ReportPaneProps {
   engineOnline: boolean;
   developing: boolean;
   onPatch: (patch: ReportPatch) => void;
+  /** Letterhead / sign-off edits, applied to this case and to every case created later. */
+  onProfile: (patch: Partial<InstitutionProfile>) => void;
   onAi: () => void;
   onDequeue: () => void;
   onReopen: () => void;
@@ -44,7 +47,7 @@ interface ReportPaneProps {
 }
 
 /** Right-hand pane: section navigation, the state banner, the report sheet and the (unprinted) notes for the AI. */
-export function ReportPane({ report: r, readOnly, engineOnline, developing, onPatch, onAi, onDequeue, onReopen, onDownload, flags, wordingConfirmed }: ReportPaneProps) {
+export function ReportPane({ report: r, readOnly, engineOnline, developing, onPatch, onProfile, onAi, onDequeue, onReopen, onDownload, flags, wordingConfirmed }: ReportPaneProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const [active, setActive] = useState<SectionId>('patient');
@@ -151,7 +154,7 @@ export function ReportPane({ report: r, readOnly, engineOnline, developing, onPa
         {!showSkeleton && flags.length > 0 && <WordingBanner flags={flags} confirmed={wordingConfirmed} onSelect={jumpToFlag} />}
 
         <div key={`${r.id}`} className="animate-in fade-in-0 duration-200">
-          {showSkeleton ? <SheetSkeleton /> : <ReportSheet report={r} readOnly={readOnly} onPatch={onPatch} developing={developing} flaggedKeys={flaggedKeys} />}
+          {showSkeleton ? <SheetSkeleton /> : <ReportSheet report={r} readOnly={readOnly} onPatch={onPatch} onProfile={onProfile} developing={developing} flaggedKeys={flaggedKeys} />}
         </div>
 
         {notesVisible && (

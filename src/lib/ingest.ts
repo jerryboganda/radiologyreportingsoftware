@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { and, eq, type SQL } from 'drizzle-orm';
 import { db } from '../db';
 import { reports, type NewReport } from '../db/schema';
+import { readInstitution } from './institutionStore';
 
 export const UPLOADS_DIR = path.resolve(process.env.UPLOADS_DIR || path.join(process.cwd(), 'uploads'));
 export const INPUT_DIR = path.resolve(process.env.INPUT_DIR || path.join(process.cwd(), 'input'));
@@ -38,6 +39,9 @@ export async function saveUpload(file: File) {
 /** Inserts the blank, auto-queued case for a new note photo. Nothing is guessed: unknown fields stay empty. */
 export async function createPendingDraft(imagePath: string) {
   const now = new Date();
+  // The letterhead / sign-off profile is copied onto the case now, so editing the profile later
+  // never rewrites a report that was created (or issued) with the old one.
+  const institution = await readInstitution();
   const [row] = await db
     .insert(reports)
     .values({
@@ -59,6 +63,7 @@ export async function createPendingDraft(imagePath: string) {
       auditStatus: 'PENDING',
       status: 'QUEUED',
       isArchived: false,
+      institutionJson: JSON.stringify(institution),
       createdAt: now,
       updatedAt: now,
     })

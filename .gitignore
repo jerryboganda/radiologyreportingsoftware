@@ -32,7 +32,8 @@ screenshot_*.png
 server*.log
 worker*.log
 
-# Machine-specific launchers that hold the production password
+# Machine-specific launchers and secrets
 start-worker-production.cmd
+opencode-gateway.key
 
 .worker-prod/

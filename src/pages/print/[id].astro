@@ -3,7 +3,8 @@ import { db } from '../../db';
 import { reports } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import { parseFindings } from '../../lib/report';
-import { INSTITUTION, documentRef } from '../../lib/institution';
+import { documentRef } from '../../lib/institution';
+import { reportInstitution } from '../../lib/institutionStore';
 
 const { id } = Astro.params;
 
@@ -17,6 +18,10 @@ if (!result || result.length === 0) {
 }
 
 const report = result[0];
+
+// The letterhead and sign-off this case prints with: its own snapshot, so a later profile edit
+// never rewrites an already-issued report.
+const INSTITUTION = await reportInstitution(report);
 
 // Never throws: malformed sections are dropped (the PDF route refuses a report without findings).
 const findingsSections = parseFindings(report.findingsJson);

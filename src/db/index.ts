@@ -45,6 +45,7 @@ await client.execute(`
     last_error TEXT,
     owner_notes TEXT,
     wording_ack TEXT,
+    institution_json TEXT,
     created_at INTEGER,
     updated_at INTEGER
   );
@@ -84,5 +85,8 @@ if (!columns.has('owner_notes')) {
 
 // Which flagged wording (see lib/wording.ts) the resident confirmed before issuing; the PDF is refused until it matches.
 if (!columns.has('wording_ack')) await client.execute('ALTER TABLE reports ADD COLUMN wording_ack TEXT');
+
+// The letterhead / sign-off profile each case prints with. Written by the app on creation.
+if (!columns.has('institution_json')) await client.execute('ALTER TABLE reports ADD COLUMN institution_json TEXT');
 
 export const db = drizzle(client, { schema });

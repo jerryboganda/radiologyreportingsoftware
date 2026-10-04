@@ -47,8 +47,8 @@ error dialog, the dialog blocks that task silently — check `logs/` and the tas
 
 ## Notes
 
-- The tasks run as your interactive user on purpose: the AI CLIs (Antigravity, OpenCode) keep
-  their logins in your user profile, which a SYSTEM service would not see.
+- The tasks run as your interactive user on purpose: the engines' credentials (the Antigravity CLI logins, the
+  OpenCode gateway key file) live in your user profile and project folder, which a SYSTEM service would not see.
 - The app on the VPS (`polytronx-radiology-app`) has Docker `restart: unless-stopped` and needs
   nothing from this folder.
 - `start-app.cmd` still works for a quick manual start, but with the tasks in place you should

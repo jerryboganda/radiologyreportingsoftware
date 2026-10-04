@@ -11,18 +11,19 @@ let workerBusy = false;
 let workerEngine: string | null = null;
 let workerModel: string | null = null;
 let workerModels: string[] = [];
+let workerModelVariants: Record<string, string[]> = {};
 
 /** Engine self-test requested from the app, awaiting the worker; delivered via heartbeat. */
-let pendingTest: { engine: string; model: string } | null = null;
+let pendingTest: { engine: string; model: string; variant: string } | null = null;
 /** The worker's last self-test outcome (from the app Settings' Test connection button). */
-let lastTest: { engine: string; model: string; ok: boolean; detail: string; at: number } | null = null;
+let lastTest: { engine: string; model: string; variant: string; ok: boolean; detail: string; at: number } | null = null;
 let modelsRefreshRequested = false;
 
 /** A PROCESSING case untouched this long is reclaimed; the worker's own job timeout is 10 min. */
 const STALE_MS = 15 * 60 * 1000;
 const REQUEUE: Partial<NewReport> = { status: 'QUEUED', auditStatus: 'PENDING', lastError: null };
 
-export const GET: APIRoute = () => Response.json({ workerLastSeen, workerBusy, workerEngine, workerModel, workerModels, lastTest, pendingTest: Boolean(pendingTest), modelsRefreshRequested });
+export const GET: APIRoute = () => Response.json({ workerLastSeen, workerBusy, workerEngine, workerModel, workerModels, workerModelVariants, lastTest, pendingTest: Boolean(pendingTest), modelsRefreshRequested });
 
 export const POST: APIRoute = async ({ request }) => {
   try {
@@ -36,6 +37,13 @@ export const POST: APIRoute = async ({ request }) => {
         if (typeof body.engine === 'string') workerEngine = body.engine;
         if (typeof body.model === 'string') workerModel = body.model;
         if (Array.isArray(body.models)) workerModels = body.models.filter((m: unknown) => typeof m === 'string');
+        if (body.modelVariants && typeof body.modelVariants === 'object') {
+          workerModelVariants = Object.fromEntries(
+            Object.entries(body.modelVariants as Record<string, unknown>).filter(
+              ([, v]) => Array.isArray(v) && v.every((x) => typeof x === 'string'),
+            ),
+          ) as Record<string, string[]>;
+        }
         // Deliver queued requests to the worker, once, then clear them.
         const reply = { ok: true, test: pendingTest, refreshModels: modelsRefreshRequested };
         pendingTest = null;
@@ -46,7 +54,7 @@ export const POST: APIRoute = async ({ request }) => {
         const engine = String(body.engine ?? '');
         const model = String(body.model ?? '');
         if (!engine || !model) return Response.json({ error: 'engine and model required' }, { status: 400 });
-        pendingTest = { engine, model };
+        pendingTest = { engine, model, variant: String(body.variant ?? '') };
         return Response.json({ ok: true });
       }
 
@@ -55,7 +63,7 @@ export const POST: APIRoute = async ({ request }) => {
         return Response.json({ ok: true });
 
       case 'test_result':
-        lastTest = { engine: String(body.engine ?? ''), model: String(body.model ?? ''), ok: Boolean(body.ok), detail: String(body.detail ?? '').slice(0, 500), at: Date.now() };
+        lastTest = { engine: String(body.engine ?? ''), model: String(body.model ?? ''), variant: String(body.variant ?? ''), ok: Boolean(body.ok), detail: String(body.detail ?? '').slice(0, 500), at: Date.now() };
         pendingTest = null;
         return Response.json({ ok: true });
 

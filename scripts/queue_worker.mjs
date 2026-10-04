@@ -1,6 +1,6 @@
-// AI worker: claims queued cases from the app, has the selected AI CLI (Antigravity `agy`
-// or OpenCode) read each note photo under the live AGENTS.md, and posts the structured
-// result back. One job at a time, no automatic retries.
+// AI worker: claims queued cases from the app, has the selected engine (Antigravity `agy`
+// CLI, or OpenCode over its gateway API) read each note photo under the live AGENTS.md, and
+// posts the structured result back. One job at a time, no automatic retries.
 // Runs on the Windows host (`npm run worker`); Node built-ins only.
 //   APP_URL          app base URL (default http://localhost:4321)
 //   APP_BASIC_AUTH   "user:password" when the app sits behind the password gate (production)
@@ -8,10 +8,11 @@
 //   AI_ENGINE        antigravity | opencode (default: the app's Settings, else antigravity)
 //   AI_MODEL         model id (default: the app's Settings, else the engine default)
 //   AGY_BIN          agy executable (default %LOCALAPPDATA%\agy\bin\agy.exe)
-//   OPENCODE_BIN     opencode executable (default: found on PATH)
+//   OPENCODE_API_KEY OpenCode Zen API key (default: the git-ignored opencode-gateway.key file)
 //   UPLOADS_DIR      where /uploads/<name> lives (default <root>/uploads)
-//   AGY_FAKE_RESULT / OPENCODE_FAKE_RESULT  test seams: use this file as the CLI output
+//   AGY_FAKE_RESULT / OPENCODE_FAKE_RESULT  test seams: use this file as the engine output
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -30,9 +31,74 @@ const AUTH_HEADER = process.env.APP_BASIC_AUTH ? { Authorization: `Basic ${Buffe
 const APP_IS_LOCAL = ['localhost', '127.0.0.1', '[::1]'].includes(new URL(APP_URL).hostname);
 const ENGINE_DEFAULT_MODEL = {
   antigravity: 'gemini-3.8-flash-high', // owner rule: Antigravity always runs Gemini 3.8 Flash, High thinking.
-  opencode: 'opencode-go/deepseek-v4-flash-vision-exp',
+  opencode: 'deepseek-v4.1-flash', // owner rule 4 Oct 2026: DeepSeek V4.1 Flash on the OpenCode gateway (no "-fast" id exists there).
 };
 const ALL_ENGINES = Object.keys(ENGINE_DEFAULT_MODEL);
+
+// --- OpenCode gateway: direct HTTPS, no CLI. ---
+// Which of the three endpoint families a model speaks is fixed by the OpenCode Go docs;
+// every model left unlisted speaks chat completions.
+const GATEWAY_BASE = 'https://opencode.ai/zen/go/v1';
+const GATEWAY_RESPONSES = new Set(['grok-4.7', 'grok-4.6', 'gpt-6-luna', 'gpt-5.6-luna', 'muse-spark-1.3-contributor', 'muse-spark-1.2-contributor']);
+const GATEWAY_MESSAGES = new Set(['minimax-m3', 'minimax-m2.7', 'qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-plus']);
+const GATEWAY_KEY_FILE = path.join(ROOT, 'opencode-gateway.key');
+const LEGACY_MODEL_PREFIX = /^(opencode-go|opencode)\//;
+
+function gatewayKey() {
+  let key = process.env.OPENCODE_API_KEY?.trim() || '';
+  if (!key) {
+    try {
+      key = fs.readFileSync(GATEWAY_KEY_FILE, 'utf8').trim();
+    } catch {}
+  }
+  if (!key) throw new Error('OpenCode gateway key missing: set OPENCODE_API_KEY or put the key in opencode-gateway.key');
+  return key;
+}
+
+/** Saved Settings may still carry the old CLI prefix (`opencode-go/...`); the gateway wants the bare id. */
+function gatewayModelId(model) {
+  return model.replace(LEGACY_MODEL_PREFIX, '');
+}
+
+/** One OpenCode gateway call → the assistant text. `image` is {mime, base64} or null. */
+async function gatewayText(model, prompt, image, timeoutMs) {
+  const id = gatewayModelId(model);
+  const family = GATEWAY_RESPONSES.has(id) ? 'responses' : GATEWAY_MESSAGES.has(id) ? 'messages' : 'chat/completions';
+  const dataUrl = image ? `data:${image.mime};base64,${image.base64}` : null;
+  const promptPart = { type: 'text', text: prompt };
+  const body =
+    family === 'responses'
+      ? { model: id, input: [{ role: 'user', content: [promptPart, ...(dataUrl ? [{ type: 'input_image', image_url: dataUrl }] : [])] }] }
+      : family === 'messages'
+        ? { model: id, max_tokens: 16384, messages: [{ role: 'user', content: [promptPart, ...(image ? [{ type: 'image', source: { type: 'base64', media_type: image.mime, data: image.base64 } }] : [])] }] }
+        : { model: id, messages: [{ role: 'user', content: [promptPart, ...(dataUrl ? [{ type: 'image_url', image_url: { url: dataUrl } }] : [])] }] };
+  const res = await fetch(`${GATEWAY_BASE}/${family}`, {
+    method: 'POST',
+    // x-opencode-session: a stable id per conversation (here: one per call, since a job makes exactly one request);
+    // the gateway uses it for routing and prompt caching (https://opencode.ai/docs/go/).
+    headers: { Authorization: `Bearer ${gatewayKey()}`, 'Content-Type': 'application/json', 'x-opencode-session': randomUUID() },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const raw = await res.text();
+  if (!res.ok) throw new Error(`opencode gateway HTTP ${res.status}: ${raw.trim().slice(0, 300)}`);
+  return gatewayReplyText(tryJson(raw));
+}
+
+/** The assistant text out of the three gateway reply shapes (chat completions / responses / messages). */
+function gatewayReplyText(reply) {
+  const parts = [];
+  const collect = (node) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) return node.forEach(collect);
+    for (const [key, value] of Object.entries(node)) {
+      if (typeof value === 'string' && (key === 'text' || key === 'output_text' || key === 'content' || key === 'output')) parts.push(value);
+      else if (typeof value === 'object') collect(value);
+    }
+  };
+  collect(reply);
+  return parts.join('\n');
+}
 const JOB_TIMEOUT_MS = 10 * 60 * 1000;
 const UPLOADS_DIR = path.resolve(process.env.UPLOADS_DIR || path.join(ROOT, 'uploads'));
 // Scratch folder inside the project root (so CLI paths never contain spaces). A local and a production worker can run
@@ -122,7 +188,7 @@ function resolveImage(imagePath) {
   return names.map((n) => path.join(UPLOADS_DIR, path.basename(n))).find((f) => fs.existsSync(f)) ?? null;
 }
 
-function buildPrompt(report, imageRel) {
+function buildPrompt(report) {
   const rulebook = fs.readFileSync(path.join(ROOT, 'AGENTS.md'), 'utf8'); // read per job, so owner edits apply at once
   const notes = report.ownerNotes?.trim();
   const corrections = notes && `
@@ -141,7 +207,7 @@ ${notes}
 
 You are running inside the reporting app's automated pipeline, not a chat. The resident reviews every result in the app before anything is signed.
 
-- Process exactly one case: the handwritten note photo \`${imageRel}\` in the working directory. Read it with your own vision and follow Sections 5, 6, 8, 9 and 10.
+- Process exactly one case: the attached handwritten note photo. Read it with your own vision and follow Sections 5, 6, 8, 9 and 10.
 - WORDING (owner ruling H28, applies to every report, always): use only the senior's own terms. Never replace a term the senior wrote with a synonym, a stronger term or a weaker one (a written "breach" must not become "perforation"; "migrated" must not become "malposition"). Never add a diagnosis, cause, complication, interpretation or certainty word ("concerning for", "suspicious for", "likely", "in keeping with") the senior did not write. The only wording you add is: expanded abbreviations, spelling and grammar, the standard normal statements for structures the senior did not mention, the technique line and the fallback recommendation. Do not suggest alternative terms anywhere, including the verification sheet.
 - Do not print "Rulebook loaded.". Do not create, modify, rename or delete any file (no \`output/\` files). This block replaces the file and chat output of Sections 4, 5 (steps 9 and 10) and 11. Do not use web search or any other external service.
 - Return ONE JSON object and nothing else (no prose, no code fences), matching \`scripts/report.schema.json\`:
@@ -174,37 +240,7 @@ function agyArgs(imageRel, model, variant = '') {
   return args;
 }
 
-function opencodeArgs(imageRel, model, variant = '') {
-  const args = [
-    'run',
-    '--format', 'json',
-    '-m', model,
-    '-f', `${WORK_REL}/prompt.md`,
-    '-f', imageRel,
-    `Follow the instructions in the attached prompt.md exactly. The attached image is the handwritten note photo. Output only the JSON object.`,
-  ];
-  if (variant) args.splice(3, 0, '--variant', variant);
-  return args;
-}
-
-/** opencode sits in the npm global folder (or PATH) as an exe/cmd shim. */
-function findOnPath(names) {
-  const dirs = (process.env.PATH || '').split(path.delimiter);
-  for (const dir of dirs) {
-    for (const name of names) {
-      const p = path.join(dir, name);
-      if (fs.existsSync(p)) return p;
-    }
-  }
-  return null;
-}
-
-const OPENCODE_BIN = process.env.OPENCODE_BIN || findOnPath(['opencode.cmd', 'opencode.exe', 'opencode']) || 'opencode';
-
-function engineBin(engine) {
-  return engine === 'opencode' ? OPENCODE_BIN : AGY_BIN;
-}
-
+/** `killTree`/`runCapture`/`runCli` only ever serve the Antigravity CLI now. */
 function killTree(child) {
   if (!child.pid) return;
   if (process.platform === 'win32') spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true });
@@ -220,8 +256,7 @@ function spawnCli(bin, args) {
 
 function runCli(imageRel, fakeResult, argsFor, engine, model, variant = '') {
   if (fakeResult) return Promise.resolve(fs.readFileSync(fakeResult, 'utf8'));
-  const bin = engineBin(engine);
-  const child = spawnCli(bin, argsFor(imageRel, model, variant));
+  const child = spawnCli(AGY_BIN, argsFor(imageRel, model, variant));
   job.child = child;
   return new Promise((resolve, reject) => {
     let stdout = '';
@@ -305,46 +340,6 @@ export function parseResult(output) {
   return value;
 }
 
-/**
- * opencode `--format json` prints one JSON event per line. The assistant text lives in
- * assorted event shapes; collect every plausible text fragment and hand the joined text
- * to parseResult, which tolerates plain JSON, fenced JSON and envelopes.
- */
-export function extractOpencodeText(stdout) {
-  const parts = [];
-  const collect = (node) => {
-    if (!node || typeof node !== 'object') return;
-    if (Array.isArray(node)) return node.forEach(collect);
-    for (const [key, value] of Object.entries(node)) {
-      if (key === 'text' && typeof value === 'string') parts.push(value);
-      else if ((key === 'response' || key === 'result' || key === 'output' || key === 'content') && typeof value === 'string') parts.push(value);
-      else if (typeof value === 'object') collect(value);
-    }
-  };
-  for (const line of String(stdout).split(/\r?\n/)) {
-    const event = tryJson(line.trim());
-    if (event) collect(event);
-  }
-  return parts.join('\n');
-}
-
-/** opencode's event stream → the result object. */
-export function parseOpencodeOutput(stdout) {
-  const text = extractOpencodeText(stdout);
-  if (text) {
-    try {
-      return parseResult(text);
-    } catch {
-      // fall through and scan line by line
-    }
-  }
-  for (const line of String(stdout).split(/\r?\n/)) {
-    const obj = tryJson(line.trim());
-    if (obj && !Array.isArray(obj) && ('status' in obj || 'technique' in obj || 'verificationSheet' in obj)) return obj;
-  }
-  return parseResult(stdout); // surfaces the usual "no JSON object" error
-}
-
 function cleanWorkDir() {
   for (const f of fs.readdirSync(WORK_DIR)) {
     if (f.startsWith('current') || f.startsWith('download')) fs.rmSync(path.join(WORK_DIR, f), { force: true });
@@ -352,26 +347,58 @@ function cleanWorkDir() {
 }
 
 const MODELS_CACHE_MS = 60_000;
-let opencodeModelsCache = { at: 0, list: null };
-let modelsFetch = null; // the one in-flight `opencode models` run, shared by the heartbeat and the main loop
+let modelsCache = { at: 0, list: null, variants: {} };
+let modelsFetch = null; // the one in-flight models run, shared by the heartbeat and the main loop
 
-const modelsStale = () => !opencodeModelsCache.list || Date.now() - opencodeModelsCache.at >= MODELS_CACHE_MS;
+const modelsStale = () => !modelsCache.list || Date.now() - modelsCache.at >= MODELS_CACHE_MS;
 
-/** Runs `opencode models` and updates the cache; concurrent callers share one run. */
+function runCapture(bin, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawnCli(bin, args);
+    let stdout = '';
+    child.stdout.setEncoding('utf8').on('data', (d) => (stdout += d));
+    child.on('error', reject);
+    child.on('close', (code) => (code === 0 ? resolve(stdout) : reject(new Error(`${args.join(' ')} exited ${code}`))));
+  });
+}
+
+/** Parses `agy models` (effort is encoded in the id suffix) into per-family effort options. */
+function parseAgyModels(out, variants) {
+  const byFamily = {};
+  for (const line of out.split(/\r?\n/)) {
+    const id = line.split('\t')[0]?.trim();
+    if (!id || !EFFORT_SUFFIX.test(id)) continue;
+    const family = id.replace(EFFORT_SUFFIX, '');
+    const effort = id.match(EFFORT_SUFFIX)[1];
+    (byFamily[family] ??= new Set()).add(effort);
+  }
+  for (const [family, efforts] of Object.entries(byFamily)) {
+    const order = ['low', 'medium', 'high', 'xhigh', 'max'];
+    const sorted = [...efforts].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    for (const e of efforts) variants[`${family}-${e}`] = sorted;
+  }
+}
+
+/** Refreshes the model lists and their reasoning-effort options; concurrent callers share one run. */
 function refreshOpencodeModels() {
   modelsFetch ??= (async () => {
     try {
-      const bin = engineBin('opencode');
-      const out = await new Promise((resolve, reject) => {
-        const child = spawnCli(bin, ['models']);
-        let stdout = '';
-        child.stdout.setEncoding('utf8').on('data', (d) => (stdout += d));
-        child.on('error', reject);
-        child.on('close', (code) => (code === 0 ? resolve(stdout) : reject(new Error(`models exited ${code}`))));
-      });
-      opencodeModelsCache = { at: Date.now(), list: out.split(/\r?\n/).map((l) => l.trim()).filter((l) => /^\S+\/\S+/.test(l)) };
+      const variants = {};
+      let list = [];
+      try {
+        const res = await fetch(`${GATEWAY_BASE}/models`, { headers: { Authorization: `Bearer ${gatewayKey()}` }, signal: AbortSignal.timeout(30_000) });
+        if (!res.ok) throw new Error(`models HTTP ${res.status}`);
+        const data = await res.json();
+        const rows = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+        list = rows.map((m) => (typeof m === 'string' ? m : m?.id)).filter((m) => typeof m === 'string');
+      } catch {}
+      try {
+        const agyOut = await runCapture(AGY_BIN, ['models']);
+        parseAgyModels(agyOut, variants);
+      } catch {}
+      modelsCache = { at: Date.now(), list, variants };
     } catch {
-      opencodeModelsCache = { at: Date.now(), list: [] };
+      modelsCache = { at: Date.now(), list: [], variants: {} };
     } finally {
       modelsFetch = null;
     }
@@ -380,41 +407,40 @@ function refreshOpencodeModels() {
 }
 
 async function listOpencodeModels(force = false) {
-  if (!force && !modelsStale()) return opencodeModelsCache.list;
+  if (!force && !modelsStale()) return modelsCache.list;
   await refreshOpencodeModels();
-  return opencodeModelsCache.list;
+  return modelsCache.list;
 }
 
-/** The engine self-test from the Settings dialog: run the CLI on a one-word prompt. */
-async function testEngine(engine, model) {
-  const bin = engineBin(engine);
-  const args =
-    engine === 'opencode'
-      ? ['run', '--format', 'json', '-m', model, 'Reply with the single word OK. Do not write any other text.']
-      : ['-p', 'Reply with the single word OK. Do not write any other text.', '--model', model, '--output-format', 'json'];
+/** The engine self-test from the Settings dialog: one tiny prompt through the selected engine. */
+async function testEngine(engine, model, variant = '') {
+  const prompt = 'Reply with the single word OK. Do not write any other text.';
   try {
-    const stdout = await new Promise((resolve, reject) => {
-      const child = spawnCli(bin, args);
-      let stdout = '';
-      let stderr = '';
-      let timedOut = false;
-      child.stdout.setEncoding('utf8').on('data', (d) => (stdout += d));
-      child.stderr.setEncoding('utf8').on('data', (d) => (stderr += d));
-      const timer = setTimeout(() => {
-        timedOut = true;
-        killTree(child);
-      }, 120_000);
-      child.on('error', (err) => {
-        clearTimeout(timer);
-        reject(err);
-      });
-      child.on('close', (code) => {
-        clearTimeout(timer);
-        if (timedOut) reject(new Error(`${engine} test timed out after 2 min`));
-        else if (code !== 0) reject(new Error(`${engine} exited with code ${code}: ${stderr.trim().slice(-300)}`));
-        else resolve(stdout);
-      });
-    });
+    const stdout =
+      engine === 'opencode'
+        ? await gatewayText(model, prompt, null, 120_000)
+        : await new Promise((resolve, reject) => {
+            const child = spawnCli(AGY_BIN, ['-p', prompt, '--model', agyModelWithEffort(model, variant), '--output-format', 'json']);
+            let stdout = '';
+            let stderr = '';
+            let timedOut = false;
+            child.stdout.setEncoding('utf8').on('data', (d) => (stdout += d));
+            child.stderr.setEncoding('utf8').on('data', (d) => (stderr += d));
+            const timer = setTimeout(() => {
+              timedOut = true;
+              killTree(child);
+            }, 120_000);
+            child.on('error', (err) => {
+              clearTimeout(timer);
+              reject(err);
+            });
+            child.on('close', (code) => {
+              clearTimeout(timer);
+              if (timedOut) reject(new Error(`${engine} test timed out after 2 min`));
+              else if (code !== 0) reject(new Error(`${engine} exited with code ${code}: ${stderr.trim().slice(-300)}`));
+              else resolve(stdout);
+            });
+          });
     return { ok: /\bOK\b/i.test(stdout) || stdout.length > 10, detail: /\bOK\b/i.test(stdout) ? '' : stdout.trim().slice(-200) };
   } catch (err) {
     return { ok: false, detail: String(err?.message || err).slice(0, 300) };
@@ -434,12 +460,20 @@ async function runJob(report) {
     if (!image) throw new Error('Source image missing');
     const imageRel = `${WORK_REL}/current${path.extname(image).toLowerCase()}`;
     fs.copyFileSync(image, path.join(ROOT, imageRel));
-    fs.writeFileSync(path.join(WORK_DIR, 'prompt.md'), buildPrompt(report, imageRel));
+    const prompt = buildPrompt(report);
+    fs.writeFileSync(path.join(WORK_DIR, 'prompt.md'), prompt);
     const fake = engine === 'opencode' ? OPENCODE_FAKE_RESULT : AGY_FAKE_RESULT;
-    const output = fake
-      ? await runCli(imageRel, fake, () => [], engine, model)
-      : await runCli(imageRel, null, engine === 'opencode' ? opencodeArgs : agyArgs, engine, model, variant);
-    const result = engine === 'opencode' ? parseOpencodeOutput(output) : parseResult(output);
+    let output;
+    if (fake) {
+      output = await runCli(imageRel, fake, () => [], engine, model);
+    } else if (engine === 'opencode') {
+      const mime = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }[path.extname(image).toLowerCase()];
+      if (!mime) throw new Error(`unsupported note photo type: ${path.extname(image)}`);
+      output = await gatewayText(model, prompt, { mime, base64: fs.readFileSync(image).toString('base64') }, JOB_TIMEOUT_MS);
+    } else {
+      output = await runCli(imageRel, null, agyArgs, engine, model, variant);
+    }
+    const result = parseResult(output);
     const saved = await post({ action: 'complete', reportId: report.id, result });
     log(`${tag}: ${saved.status} in ${Math.round((Date.now() - started) / 1000)} s`);
   } catch (err) {
@@ -499,10 +533,10 @@ async function main() {
   let needModelFetch = false;
   const heartbeat = async () => {
     try {
-      // The beat must never wait on the model CLI: a slow `opencode models` is refreshed in
+      // The beat must never wait on the models refresh: a slow gateway call is done in
       // the background, and a delayed heartbeat reads as "AI engine offline" in the app.
       if (modelsStale()) refreshOpencodeModels().catch(() => {});
-      const body = await post({ action: 'heartbeat', busy: Boolean(job) || Boolean(testToRun), engine: currentEngine, model: currentModel, models: opencodeModelsCache.list ?? [] });
+      const body = await post({ action: 'heartbeat', busy: Boolean(job) || Boolean(testToRun), engine: currentEngine, model: currentModel, models: modelsCache.list ?? [], modelVariants: modelsCache.variants ?? {} });
       if (body?.test && !job && !testToRun) testToRun = body.test;
       if (body?.refreshModels) needModelFetch = true;
     } catch {}
@@ -515,7 +549,7 @@ async function main() {
   for (;;) {
     if (needModelFetch) {
       needModelFetch = false;
-      opencodeModelsCache.at = 0; // expire so the next heartbeat re-runs `opencode models`
+      modelsCache.at = 0; // expire so the next heartbeat re-runs the models refresh
       log('refreshing the model list');
       await listOpencodeModels(true).catch(() => {});
     }
@@ -523,26 +557,30 @@ async function main() {
       const t = testToRun;
       testToRun = null;
       log(`testing ${t.engine} with ${t.model}`);
-      const result = await testEngine(t.engine, t.model);
+      const result = await testEngine(t.engine, t.model, t.variant || '');
       log(`test ${result.ok ? 'OK' : 'FAILED'}: ${result.detail.split('\n')[0].slice(0, 120)}`);
-      await post({ action: 'test_result', engine: t.engine, model: t.model, ok: result.ok, detail: result.detail }).catch((e) => log(`could not record the test: ${e.message}`));
+      await post({ action: 'test_result', engine: t.engine, model: t.model, variant: t.variant || '', ok: result.ok, detail: result.detail }).catch((e) => log(`could not record the test: ${e.message}`));
       continue;
     }
 
     // Engine/model follow the app Settings unless AI_ENGINE / AI_MODEL force them.
     const settings = await readSettings();
-    const { engine, model } = resolveEngineModel(settings);
-    if (engine !== currentEngine || model !== currentModel) {
+    const { engine, model, variant } = resolveEngineModel(settings);
+    if (engine !== currentEngine || model !== currentModel || variant !== currentVariant) {
       currentEngine = engine;
       currentModel = model;
-      const bin = engineBin(engine);
+      currentVariant = variant;
       const fake = engine === 'opencode' ? OPENCODE_FAKE_RESULT : AGY_FAKE_RESULT;
       if (!fake && engine === 'antigravity' && !fs.existsSync(AGY_BIN)) {
         log(`Antigravity CLI not found at ${AGY_BIN}; set AGY_BIN or pick another engine`);
-      } else if (!fake && engine === 'opencode' && !fs.existsSync(OPENCODE_BIN)) {
-        log(`OpenCode CLI not found at ${OPENCODE_BIN}; set OPENCODE_BIN or pick another engine`);
+      } else if (!fake && engine === 'opencode') {
+        try {
+          gatewayKey();
+        } catch (e) {
+          log(e.message);
+        }
       }
-      log(`engine=${engine} model=${model} via ${fake || bin}`);
+      log(`engine=${engine} model=${model}${variant ? ` variant=${variant}` : ''} via ${fake || (engine === 'antigravity' ? AGY_BIN : 'the OpenCode gateway')}`);
     }
 
     let report = null;

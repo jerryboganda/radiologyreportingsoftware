@@ -36,6 +36,8 @@ export const reports = sqliteTable('reports', {
   ownerNotes: text('owner_notes'),
   // Signature of the flagged wording the resident confirmed (lib/wording.ts wordingSignature); null = nothing confirmed.
   wordingAck: text('wording_ack'),
+  /** The letterhead / sign-off profile printed with this case (snapshotted at creation). */
+  institutionJson: text('institution_json'),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });

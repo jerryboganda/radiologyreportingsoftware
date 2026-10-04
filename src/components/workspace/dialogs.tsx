@@ -1,11 +1,18 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { BadgeCheck, CircleDashed, Download, History, MessageCircleQuestion, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { BadgeCheck, CircleDashed, Download, History, MessageCircleQuestion, Plus, ShieldCheck, Trash2, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import type { ReportItem } from '../../lib/report';
+import {
+  MAX_REPORTERS,
+  defaultProfile,
+  sanitizeProfile,
+  type InstitutionProfile,
+  type Radiologist,
+} from '../../lib/institution';
 import type { WordingFlag } from '../../lib/wording';
 import { cn } from '../../lib/cn';
 import { Button, Kbd } from '../ui/button';
-import { Dialog, DialogClose, DialogContent, PanelContent } from '../ui/overlay';
+import { Dialog, DialogClose, DialogContent, IconButton, PanelContent } from '../ui/overlay';
 import { ageSex, displayName, longDate, parseSheet } from './format';
 import { WordingList } from './WordingList';
 
@@ -273,24 +280,29 @@ const SHORTCUTS: [string[], string][] = [
 
 const ENGINE_OPTIONS = [
   { value: 'antigravity', label: 'Antigravity (agy CLI)' },
-  { value: 'opencode', label: 'OpenCode CLI' },
+  { value: 'opencode', label: 'OpenCode gateway' },
 ] as const;
 
 export function SettingsDialog({
   open,
   onOpenChange,
+  onOpenSignOff,
   workerModels,
+  workerVariants,
   workerEngine,
   workerModel,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
+  onOpenSignOff: () => void;
   workerModels: string[];
+  workerVariants: Record<string, string[]>;
   workerEngine: string | null;
   workerModel: string | null;
 }) {
   const [engine, setEngine] = useState('antigravity');
   const [model, setModel] = useState('');
+  const [variant, setVariant] = useState('');
   const [busy, setBusy] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [fetchNote, setFetchNote] = useState('');
@@ -306,6 +318,7 @@ export function SettingsDialog({
         if (cancelled) return;
         setEngine(typeof s.engine === 'string' ? s.engine : 'antigravity');
         setModel(typeof s.model === 'string' ? s.model : '');
+        setVariant(typeof s.variant === 'string' ? s.variant : '');
       })
       .catch(() => {});
     // Opening the dialog asks the worker to re-list models; the updated list arrives on its next heartbeat.
@@ -331,7 +344,7 @@ export function SettingsDialog({
     setFetchNote('Fetching the latest models from the worker…');
     try {
       await fetch('/api/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'fetch_models' }) });
-      setFetchNote('The worker re-lists `opencode models`; the list updates within a few seconds. Is the worker online? If it stays empty, start it.');
+      setFetchNote('The worker re-asks the OpenCode gateway for its models; the list updates within a few seconds. Is the worker online? If it stays empty, start it.');
     } catch {
       setFetchNote('Could not reach the app server.');
     } finally {
@@ -344,12 +357,12 @@ export function SettingsDialog({
     setTestResult(null);
     const startedAt = Date.now();
     try {
-      await fetch('/api/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'request_test', engine, model: model.trim() }) });
+      await fetch('/api/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'request_test', engine, model: model.trim(), variant: effectiveVariant }) });
       for (;;) {
         await new Promise((r) => setTimeout(r, 2000));
         const q = await fetch('/api/queue').then((r) => r.json()).catch(() => null);
         const t = q?.lastTest;
-        if (t && t.at >= startedAt && t.engine === engine && t.model === model.trim()) {
+        if (t && t.at >= startedAt && t.engine === engine && t.model === model.trim() && String(t.variant ?? '') === effectiveVariant) {
           setTestResult({ ok: Boolean(t.ok), detail: String(t.detail ?? '') });
           break;
         }
@@ -370,17 +383,21 @@ export function SettingsDialog({
     return model && !opts.includes(model) ? [...opts, model] : [...opts];
   }, [engine, workerModels, model]);
 
+  // The effort options follow the selected model in real time; an effort that does not exist for the new model is treated as unset.
+  const variantOptions = useMemo(() => workerVariants[model] ?? [], [workerVariants, model]);
+  const effectiveVariant = variantOptions.includes(variant) ? variant : '';
+
   const save = async () => {
     setBusy(true);
     try {
       const res = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ engine, model: model.trim() }),
+        body: JSON.stringify({ engine, model: model.trim(), variant: effectiveVariant }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Could not save settings');
-      toast.success('AI settings saved', { description: `${engine} · ${model.trim()}. The worker picks it up on the next case.` });
+      toast.success('AI settings saved', { description: `${engine} · ${model.trim()}${effectiveVariant ? ` · ${effectiveVariant}` : ''}. The worker picks it up on the next case.` });
       onOpenChange(false);
     } catch (error) {
       toast.error('Could not save settings', { description: (error as Error).message });
@@ -397,6 +414,9 @@ export function SettingsDialog({
         description="Which CLI drafts the reports, and which model it runs."
         footer={
           <>
+            <Button variant="ghost" onClick={onOpenSignOff} className="mr-auto">
+              Letterhead and sign-off…
+            </Button>
             <DialogClose asChild>
               <Button variant="ghost">Cancel</Button>
             </DialogClose>
@@ -439,7 +459,7 @@ export function SettingsDialog({
               <input
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                placeholder="e.g. opencode-go/deepseek-v4-flash"
+                placeholder="e.g. deepseek-v4.1-flash"
                 className="h-10 w-full rounded-md border border-line bg-surface px-3 text-base text-ink placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
               />
             )}
@@ -454,6 +474,27 @@ export function SettingsDialog({
             <p className="text-xs text-muted">{fetchNote}</p>
           </label>
 
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium text-ink">Reasoning effort</span>
+            {variantOptions.length > 0 ? (
+              <select
+                value={effectiveVariant}
+                onChange={(e) => setVariant(e.target.value)}
+                className="h-10 w-full rounded-md border border-line bg-surface px-3 text-base text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+              >
+                <option value="">Default (whatever the model uses)</option>
+                {variantOptions.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="text-xs text-muted">No selectable reasoning effort for this model.</p>
+            )}
+            <p className="text-xs text-muted">Updates from the selected model above; saved per engine and model.</p>
+          </label>
+
           <div className="rounded-md border border-line bg-surface-2 px-3 py-2.5">
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-medium text-ink">Connection test</span>
@@ -463,7 +504,7 @@ export function SettingsDialog({
             </div>
             <p className="mt-1.5 text-xs text-muted">
               {testing
-                ? `Asking the ${engine} worker to run ${model} on a one-word prompt…`
+                ? `Asking the ${engine} worker to run ${model}${effectiveVariant ? ` (${effectiveVariant})` : ''} on a one-word prompt…`
                 : testResult
                   ? testResult.ok
                     ? `OK — ${engine} responded${testResult.detail ? `: ${testResult.detail}` : ''}`
@@ -471,6 +512,177 @@ export function SettingsDialog({
                   : "Asks the AI worker to run the selected engine and model once; reports OK or the error."}
             </p>
           </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ---------- Letterhead & sign-off ---------- */
+
+const PROFILE_TEXT_FIELDS: [keyof Omit<InstitutionProfile, 'reportingRadiologists'>, string][] = [
+  ['department', 'Department (letterhead)'],
+  ['hospital', 'Hospital (letterhead)'],
+  ['hod', 'Head of Department'],
+  ['hodQualification', 'Head of Department qualification'],
+  ['seniorRegistrars', 'Senior Registrars'],
+  ['footer', 'Footer line'],
+];
+
+const inputClass =
+  'h-10 w-full rounded-md border border-line bg-surface px-3 text-base text-ink placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20';
+
+/**
+ * The printed letterhead and sign-off. Edits are saved as the profile every case created from now on
+ * prints with; cases that already exist keep the profile they were issued with.
+ */
+export function SignOffSettings({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+  const [profile, setProfile] = useState<InstitutionProfile>(() => defaultProfile());
+  const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetch('/api/settings')
+      .then((r) => r.json())
+      .then((s) => {
+        if (cancelled) return;
+        setProfile(sanitizeProfile(s.institution));
+        setLoaded(true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const write = async (next: InstitutionProfile, message: string) => {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ institution: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not save the letterhead');
+      setProfile(sanitizeProfile(data.institution ?? next));
+      toast.success(message);
+    } catch (error) {
+      toast.error('Could not save the letterhead', { description: (error as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const save = () => void write(profile, 'Letterhead and sign-off saved — every new report prints this');
+
+  const reset = () => void write(defaultProfile(), 'Letterhead and sign-off reset to the GMCTH defaults');
+
+  const setField = (key: keyof InstitutionProfile, value: string) => setProfile((p) => ({ ...p, [key]: value }));
+  const setRadiologist = (index: number, patch: Partial<Radiologist>) =>
+    setProfile((p) => ({
+      ...p,
+      reportingRadiologists: p.reportingRadiologists.map((doc, i) => (i === index ? { ...doc, ...patch } : doc)),
+    }));
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        size="lg"
+        title="Letterhead and sign-off"
+        description="The fixed parts printed on every report. Also editable in place on the report sheet."
+        footer={
+          <>
+            <Button variant="ghost" onClick={reset} loading={busy} className="mr-auto">
+              Reset to GMCTH defaults
+            </Button>
+            <DialogClose asChild>
+              <Button variant="ghost">Cancel</Button>
+            </DialogClose>
+            <Button onClick={save} loading={busy} disabled={!loaded}>
+              Save
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 px-5 py-4">
+          <section aria-label="Reporting radiologists" className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-ink">Primary reporting radiologists</h3>
+              <Button
+                variant="subtle"
+                size="sm"
+                onClick={() =>
+                  setProfile((p) => ({
+                    ...p,
+                    reportingRadiologists: [...p.reportingRadiologists, { name: '', qualification: '' }],
+                  }))
+                }
+                disabled={busy || profile.reportingRadiologists.length >= MAX_REPORTERS}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add radiologist
+              </Button>
+            </div>
+            {profile.reportingRadiologists.length === 0 && <p className="text-xs text-muted">No radiologists listed; the block prints empty.</p>}
+            <ul className="space-y-2">
+              {profile.reportingRadiologists.map((doc, index) => (
+                <li key={index} className="flex items-center gap-2">
+                  <input
+                    value={doc.name}
+                    onChange={(e) => setRadiologist(index, { name: e.target.value })}
+                    placeholder="Name"
+                    aria-label={`Radiologist ${index + 1} name`}
+                    className={inputClass}
+                  />
+                  <input
+                    value={doc.qualification}
+                    onChange={(e) => setRadiologist(index, { qualification: e.target.value })}
+                    placeholder="Qualification"
+                    aria-label={`Radiologist ${index + 1} qualification`}
+                    className={inputClass}
+                  />
+                  <IconButton
+                    label={`Remove ${doc.name || `radiologist ${index + 1}`}`}
+                    variant="ghost"
+                    onClick={() =>
+                      setProfile((p) => ({ ...p, reportingRadiologists: p.reportingRadiologists.filter((_, i) => i !== index) }))
+                    }
+                    disabled={busy}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </IconButton>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section aria-label="Letterhead and footer text" className="grid gap-3 sm:grid-cols-2">
+            {PROFILE_TEXT_FIELDS.map(([key, label]) => (
+              <label key={key} className="block space-y-1.5">
+                <span className="text-sm font-medium text-ink">{label}</span>
+                <input
+                  value={profile[key] as string}
+                  onChange={(e) => setField(key, e.target.value)}
+                  className={inputClass}
+                />
+              </label>
+            ))}
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-ink">Government line</span>
+              <input
+                value={profile.government}
+                onChange={(e) => setField('government', e.target.value)}
+                className={inputClass}
+              />
+            </label>
+          </section>
+
+          <p className="text-xs text-muted">
+            Reports already issued keep the letterhead they were printed with. The document reference is generated per case.
+          </p>
         </div>
       </DialogContent>
     </Dialog>

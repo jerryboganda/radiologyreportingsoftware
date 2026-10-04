@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { toast } from 'sonner';
 import { ListPlus, Plus, Siren, Trash2, X } from 'lucide-react';
 import { parseFindings, type FindingItem, type FindingSection, type ReportItem, type ReportPatch } from '../../lib/report';
-import { INSTITUTION, documentRef } from '../../lib/institution';
+import { documentRef, defaultProfile, profileFromSnapshot, type InstitutionProfile } from '../../lib/institution';
 import { cn } from '../../lib/cn';
 import { AutoTextarea } from '../ui/auto-textarea';
 import { IconButton, Tooltip } from '../ui/overlay';
@@ -31,6 +31,8 @@ interface ReportSheetProps {
   report: ReportItem;
   readOnly: boolean;
   onPatch: (patch: ReportPatch) => void;
+  /** Letterhead / sign-off edits: applied to this case and saved as the profile future cases print with. */
+  onProfile?: (patch: Partial<InstitutionProfile>) => void;
   /** Keys of lines containing wording the senior never wrote (lib/wording.ts), ringed in amber until the resident confirms. */
   flaggedKeys?: ReadonlySet<string>;
   /** Play the "developing" reveal (fresh AI draft just landed). */
@@ -38,7 +40,8 @@ interface ReportSheetProps {
 }
 
 /** The live twin of the issued A4 report: the PDF's letterhead, hierarchy and impression card, editable in place. */
-export function ReportSheet({ report: r, readOnly, onPatch, developing, flaggedKeys = NO_FLAGS }: ReportSheetProps) {
+export function ReportSheet({ report: r, readOnly, onPatch, onProfile, developing, flaggedKeys = NO_FLAGS }: ReportSheetProps) {
+  const profile = profileFromSnapshot(r.institutionJson);
   const reveal = (index: number): { className?: string; style?: CSSProperties } =>
     developing
       ? { className: 'motion-safe:animate-develop motion-reduce:animate-in motion-reduce:fade-in-0', style: { animationDelay: `${index * 90}ms` } }
@@ -46,7 +49,7 @@ export function ReportSheet({ report: r, readOnly, onPatch, developing, flaggedK
 
   return (
     <article className="mx-auto w-full max-w-[52rem] rounded-[6px] bg-sheet font-document text-sheet-ink shadow-sheet ring-1 ring-sheet-line/70 [container:sheet/inline-size]">
-      <Letterhead developing={developing} />
+      <Letterhead developing={developing} profile={profile} readOnly={readOnly || !onProfile} onProfile={onProfile} />
       <div className="px-4 pb-8 wide:px-10 wide:pb-10">
         <section id="patient" data-section className={cn('scroll-mt-16 pt-1', reveal(0).className)} style={reveal(0).style}>
           <MetaGrid r={r} readOnly={readOnly} onPatch={onPatch} />
@@ -116,7 +119,7 @@ export function ReportSheet({ report: r, readOnly, onPatch, developing, flaggedK
           </div>
         </section>
 
-        <SignOff r={r} />
+        <SignOff r={r} profile={profile} readOnly={readOnly || !onProfile} onProfile={onProfile} />
       </div>
     </article>
   );
@@ -124,18 +127,83 @@ export function ReportSheet({ report: r, readOnly, onPatch, developing, flaggedK
 
 const crestClass = 'h-9 w-9 shrink-0 rounded-full bg-white object-contain ring-1 ring-black/5 dark:ring-white/15 wide:h-12 wide:w-12';
 
-function Letterhead({ developing }: { developing?: boolean }) {
-  const draw = developing ? 'motion-safe:animate-rule-draw' : '';
+/** One editable letterhead / sign-off value: an input that reads as printed text until hovered. */
+function ProfileInput({
+  value,
+  readOnly,
+  label,
+  onChange,
+  className,
+}: {
+  value: string;
+  readOnly: boolean;
+  label: string;
+  onChange?: (value: string) => void;
+  className?: string;
+}) {
   return (
-    <div className="px-4 pt-5 wide:px-10 wide:pt-7" aria-hidden>
+    <input
+      value={value}
+      readOnly={readOnly}
+      aria-label={label}
+      placeholder={readOnly ? undefined : label}
+      onChange={(e) => onChange?.(e.target.value)}
+      className={fieldClass(readOnly, className)}
+    />
+  );
+}
+
+function Letterhead({
+  developing,
+  profile,
+  readOnly = true,
+  onProfile,
+}: {
+  developing?: boolean;
+  profile?: InstitutionProfile;
+  readOnly?: boolean;
+  onProfile?: (patch: Partial<InstitutionProfile>) => void;
+}) {
+  const draw = developing ? 'motion-safe:animate-rule-draw' : '';
+  const inst = profile ?? defaultProfile();
+  const set = (patch: Partial<InstitutionProfile>) => onProfile?.(patch);
+  return (
+    <div className="px-4 pt-5 wide:px-10 wide:pt-7" aria-label="Report letterhead">
       <div className="flex items-center gap-3 wide:gap-4">
         <img src="/assets/gmc_crest_300dpi.png" alt="" className={crestClass} />
         <div className="min-w-0 flex-1 text-center leading-tight">
-          <p className="text-sm font-black uppercase tracking-[-0.005em] text-brand-ink wide:text-lg">{INSTITUTION.department}</p>
-          <p className="mt-0.5 text-xs font-bold uppercase tracking-[0.03em] text-sheet-ink/75">{INSTITUTION.hospital}</p>
+          <ProfileInput
+            value={inst.department}
+            readOnly={readOnly}
+            label="Department"
+            onChange={(department) => set({ department })}
+            className="text-center text-sm font-black uppercase tracking-[-0.005em] text-brand-ink wide:text-lg"
+          />
+          <ProfileInput
+            value={inst.hospital}
+            readOnly={readOnly}
+            label="Hospital"
+            onChange={(hospital) => set({ hospital })}
+            className="mt-0.5 text-center text-xs font-bold uppercase tracking-[0.03em] text-sheet-ink/75"
+          />
           <p className="mt-1 hidden text-xs text-sheet-ink/70 wide:block">
-            <strong className="font-bold">HOD:</strong> {INSTITUTION.hod} <span className="text-faint">•</span> <strong className="font-bold">Senior Registrars:</strong>{' '}
-            {INSTITUTION.seniorRegistrars}
+            <strong className="font-bold">HOD:</strong>{' '}
+            <ProfileInput
+              value={inst.hod}
+              readOnly={readOnly}
+              label="Head of Department"
+              onChange={(hod) => set({ hod })}
+              className="inline-block w-[13rem] align-baseline text-xs text-sheet-ink/70"
+            />{' '}
+            <span className="text-faint">•</span>{' '}
+            <strong className="font-bold">Senior Registrars:</strong>{' '}
+            <ProfileInput
+              value={inst.seniorRegistrars}
+              readOnly={readOnly}
+              label="Senior Registrars"
+              onChange={(seniorRegistrars) => set({ seniorRegistrars })}
+              className="inline-block w-[16rem] align-baseline text-xs text-sheet-ink/70"
+            />
           </p>
         </div>
         <img src="/assets/gth_crest_300dpi.png" alt="" className={crestClass} />
@@ -182,30 +250,85 @@ function SheetSection({
   );
 }
 
-/** The printed sign-off and footer: fixed parts of every issued report, shown so the twin ends where the page ends. */
-function SignOff({ r }: { r: ReportItem }) {
+/** The printed sign-off and footer: the letterhead profile's sign-off half, shown so the twin ends where the page ends. */
+function SignOff({
+  r,
+  profile,
+  readOnly = true,
+  onProfile,
+}: {
+  r: ReportItem;
+  profile?: InstitutionProfile;
+  readOnly?: boolean;
+  onProfile?: (patch: Partial<InstitutionProfile>) => void;
+}) {
+  const inst = profile ?? defaultProfile();
+  const set = (patch: Partial<InstitutionProfile>) => onProfile?.(patch);
+  const setRadiologist = (index: number, patch: Partial<{ name: string; qualification: string }>) =>
+    set({ reportingRadiologists: inst.reportingRadiologists.map((doc, i) => (i === index ? { ...doc, ...patch } : doc)) });
   return (
     <footer aria-label="Printed sign-off" className="mt-8">
       <div className="grid gap-4 border-t border-sheet-line pt-3 wide:grid-cols-2 wide:gap-0">
         <div className="wide:border-r wide:border-sheet-line wide:pr-5">
           <p className="text-xs font-extrabold uppercase tracking-[0.08em] text-muted">Primary Reporting Radiologists</p>
           <ul className="mt-1.5 space-y-0.5 text-sm leading-snug">
-            {INSTITUTION.reportingRadiologists.map((doc) => (
-              <li key={doc.name}>
-                <span className="font-bold text-sheet-ink">{doc.name}</span> <span className="text-muted">— {doc.qualification}</span>
+            {inst.reportingRadiologists.map((doc, index) => (
+              <li key={index} className="flex flex-wrap items-baseline gap-x-1">
+                <ProfileInput
+                  value={doc.name}
+                  readOnly={readOnly}
+                  label={`Radiologist ${index + 1} name`}
+                  onChange={(name) => setRadiologist(index, { name })}
+                  className="w-[11rem] font-bold text-sheet-ink"
+                />
+                <span className="text-muted">—</span>
+                <ProfileInput
+                  value={doc.qualification}
+                  readOnly={readOnly}
+                  label={`Radiologist ${index + 1} qualification`}
+                  onChange={(qualification) => setRadiologist(index, { qualification })}
+                  className="w-[14rem] text-muted"
+                />
               </li>
             ))}
           </ul>
         </div>
         <div className="wide:pl-5 wide:text-right">
           <p className="text-xs font-extrabold uppercase tracking-[0.08em] text-muted">Reviewed &amp; Approved By (Consultants)</p>
-          <p className="mt-1.5 text-md font-black text-brand-ink">{INSTITUTION.hod}</p>
-          <p className="text-sm font-bold text-sheet-ink/80">{INSTITUTION.hodQualification}</p>
-          <p className="mt-0.5 text-sm text-muted">{INSTITUTION.seniorRegistrars} (Senior Registrars)</p>
+          <ProfileInput
+            value={inst.hod}
+            readOnly={readOnly}
+            label="Head of Department"
+            onChange={(hod) => set({ hod })}
+            className="mt-1.5 block w-full text-right text-md font-black text-brand-ink"
+          />
+          <ProfileInput
+            value={inst.hodQualification}
+            readOnly={readOnly}
+            label="Head of Department qualification"
+            onChange={(hodQualification) => set({ hodQualification })}
+            className="block w-full text-right text-sm font-bold text-sheet-ink/80"
+          />
+          <div className="mt-0.5 flex items-baseline justify-end gap-1 text-sm text-muted">
+            <ProfileInput
+              value={inst.seniorRegistrars}
+              readOnly={readOnly}
+              label="Senior Registrars"
+              onChange={(seniorRegistrars) => set({ seniorRegistrars })}
+              className="w-[15rem] text-right text-sm text-muted"
+            />
+            <span>(Senior Registrars)</span>
+          </div>
         </div>
       </div>
       <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-sheet-line pt-2 text-xs text-muted">
-        <span>{INSTITUTION.footer}</span>
+        <ProfileInput
+          value={inst.footer}
+          readOnly={readOnly}
+          label="Footer line"
+          onChange={(footer) => set({ footer })}
+          className="min-w-[16rem] flex-1 text-xs text-muted"
+        />
         <span className="font-mono">Document Ref: {documentRef(r.tokenNumber, r.id)}</span>
       </div>
     </footer>

@@ -11,7 +11,7 @@ import { ConfirmDialog, Dialog, IconButton, SheetContent, TooltipProvider } from
 import { Segmented } from '../ui/segmented';
 import { Skeleton } from '../ui/status';
 import { CaseHeader, aiActionFor } from './CaseHeader';
-import { ApproveDialog, AuditDialog, SettingsDialog, ShortcutsDialog } from './dialogs';
+import { ApproveDialog, AuditDialog, SettingsDialog, ShortcutsDialog, SignOffSettings } from './dialogs';
 import { DropOverlay, EmptyState, NoSelection } from './EmptyState';
 import { displayName } from './format';
 import { NoteViewer } from './NoteViewer';
@@ -106,6 +106,7 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
   const [approveOpen, setApproveOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [signOffOpen, setSignOffOpen] = useState(false);
   const [regenerateId, setRegenerateId] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [develop, setDevelop] = useState<{ id: string; n: number; live: boolean }>({ id: '', n: 0, live: false });
@@ -334,6 +335,7 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
       flags={flags}
       wordingConfirmed={wordingConfirmed}
       onPatch={api.update}
+      onProfile={api.updateInstitution}
       onAi={() => void runAi(draft.id)}
       onDequeue={() => void onAction('dequeue')}
       onReopen={() => void onAction('reopen')}
@@ -506,7 +508,8 @@ function Workspace({ theme, isDesktop }: { theme: ThemeApi; isDesktop: boolean }
         }}
       />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} workerModels={api.engineModels} workerEngine={api.engineEngine} workerModel={api.engineModel} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} onOpenSignOff={() => { setSettingsOpen(false); setSignOffOpen(true); }} workerModels={api.engineModels} workerVariants={api.engineModelVariants} workerEngine={api.engineEngine} workerModel={api.engineModel} />
+      <SignOffSettings open={signOffOpen} onOpenChange={setSignOffOpen} />
     </div>
   );
 }

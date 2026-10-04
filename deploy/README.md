@@ -13,7 +13,7 @@
 Edit `.env` on the VPS, run `docker compose up -d`, then update `start-worker-production.cmd` on the PC and restart the worker.
 
 ## AI engine
-The AI reads each note on the reporting PC, not on the server (the CLI logins live there): run `start-worker-production.cmd`. It downloads each note photo over HTTPS, runs the selected engine (gy = Gemini 3.8 Flash High, or opencode with the chosen model), and posts the draft back. When the PC or worker is off, uploads wait as "Queued" and the app shows "AI engine offline".
+The AI reads each note on the reporting PC, not on the server (the CLI logins live there): run `start-worker-production.cmd`. It downloads each note photo over HTTPS, runs the selected engine (agy = Gemini 3.8 Flash High, or the OpenCode gateway with the chosen model; the gateway key lives in the git-ignored `opencode-gateway.key`), and posts the draft back. When the PC or worker is off, uploads wait as "Queued" and the app shows "AI engine offline".
 
 ## Wording check
 The app compares every serious medical term and number in a draft with the senior's note and refuses to issue a PDF until the resident confirms any wording the senior did not write (`src/lib/wording.ts`; the server enforces it in `/api/pdf/<id>`). Run `npm run check:wording` after editing the word list; the checks `check:api`, `check:auth` and `check:ui` cover the rest.
