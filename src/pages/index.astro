@@ -1,7 +1,23 @@
 ---
 import '@fontsource-variable/inter/opsz.css';
 import '../styles/global.css';
+import interLatin from '@fontsource-variable/inter/files/inter-latin-opsz-normal.woff2?url';
 import ReportWorkspace from '../components/workspace/ReportWorkspace';
+
+// The lit brand tile (BrandMark in QueueSidebar.tsx) without its report lines and cobalt cell: React's mark draws
+// them in during the intro, so the tile itself never blinks. `id` keeps each copy's gradient unique.
+const mark = (cls: string, id: string) => `<svg viewBox="0 0 32 32" class="${cls} shrink-0 drop-shadow-[0_3px_8px_rgb(var(--accent)/0.35)]" aria-hidden="true">
+  <defs>
+    <linearGradient id="${id}" x2="0" y2="1">
+      <stop class="[stop-color:#1E4078] dark:[stop-color:#2C5CC8]" />
+      <stop offset="1" class="[stop-color:#0F2C59] dark:[stop-color:#1B3A73]" />
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#${id})" />
+  <rect x=".5" y=".5" width="31" height="31" rx="7.5" fill="none" stroke="#fff" stroke-opacity=".14" />
+</svg>`;
+// One continuous cobalt glow rule along every 56px bar hairline (fixed attachment lines the bars up).
+const rule = 'relative after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-px after:h-px after:glow-rule';
 ---
 
 <!doctype html>
@@ -9,19 +25,26 @@ import ReportWorkspace from '../components/workspace/ReportWorkspace';
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#ECF0F6" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#090D15" media="(prefers-color-scheme: dark)" />
+    <!-- The top bars' surface colour; the script below and useTheme keep it on the in-app theme. -->
+    <meta name="theme-color" content="#FFFFFF" />
     <title>PolytronX · Radiology Reporting</title>
-    <link rel="icon" type="image/png" href="/assets/gmc_crest_300dpi.png" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preload" href={interLatin} as="font" type="font/woff2" crossorigin />
     <script is:inline>
-      // Apply the saved theme before first paint (no flash). "system" follows the OS.
+      // Apply the saved theme and queue state before first paint (no flash). "system" follows the OS.
       (() => {
         let pref = 'system';
+        let queue = null;
         try {
           pref = localStorage.getItem('theme') || 'system';
+          queue = localStorage.getItem('sidebar-open');
         } catch {}
         const dark = pref === 'dark' || (pref === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
         document.documentElement.classList.toggle('dark', dark);
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#101622' : '#FFFFFF');
+        // The case list starts closed below 1280px on a first visit.
+        const closed = queue === 'false' || (queue === null && innerWidth < 1280);
+        document.documentElement.dataset.queue = closed ? 'closed' : 'open';
       })();
     </script>
   </head>
@@ -34,6 +57,50 @@ FIRST VIEWPORT: Case queue left; note light box centre; the report sheet right; 
 FORM: Inherited established world (locked print template), no concept roll; signature moment = scan beam over the note while the report develops section by section.
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 -->`} />
-    <ReportWorkspace client:only="react" />
+    <ReportWorkspace client:only="react">
+      <!-- Static first paint while the bundle loads: the workstation frame, replaced in place by React. -->
+      <div slot="fallback" class="app-glow flex h-dvh overflow-hidden text-ink" aria-busy="true" aria-label="Loading PolytronX">
+        <aside class="shell-queue glass hidden w-[304px] shrink-0 flex-col border-r border-line/70 shadow-[inset_-1px_0_0_rgb(var(--glass-edge)/var(--glass-edge-a))] lg:flex">
+          <div class={`flex h-14 shrink-0 items-center gap-2.5 border-b border-line/70 px-3 ${rule}`}>
+            <Fragment set:html={mark('h-8 w-8', 'shell-tile')} />
+            <div class="min-w-0 flex-1 leading-tight">
+              <div class="text-md font-semibold tracking-[-0.01em] text-ink">PolytronX</div>
+              <div class="text-xs text-muted">Radiology reporting</div>
+            </div>
+          </div>
+          <div class="space-y-3 p-3">
+            {[0, 1, 2, 3].map(() => (
+              <div class="space-y-2 px-1 py-1.5">
+                <div class="skeleton h-4 w-3/5"></div>
+                <div class="skeleton h-3 w-2/5"></div>
+              </div>
+            ))}
+          </div>
+        </aside>
+        <main class="flex min-w-0 flex-1 flex-col">
+          <div class={`glass flex h-14 shrink-0 items-center gap-2.5 border-b border-line/70 px-2.5 lg:hidden ${rule}`}>
+            <span class="grid h-9 w-9 place-items-center text-ink-2">
+              <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <path d="M4 6h16M4 12h16M4 18h16"></path>
+              </svg>
+            </span>
+            <Fragment set:html={mark('h-7 w-7', 'shell-tile-sm')} />
+            <span class="text-md font-semibold tracking-[-0.01em] text-ink">PolytronX</span>
+          </div>
+          <div class={`glass hidden h-14 shrink-0 items-center gap-3 border-b border-line/70 px-4 lg:flex ${rule}`}>
+            <div class="skeleton h-5 w-40"></div>
+            <div class="skeleton h-5 w-16 rounded-full"></div>
+          </div>
+          <div class="min-h-0 flex-1 overflow-hidden px-3 pt-4 sm:px-6 sm:pt-6">
+            <div class="mx-auto w-full max-w-[52rem] space-y-4 rounded-[6px] bg-sheet px-6 py-8 shadow-sheet ring-1 ring-sheet-line/70">
+              <div class="skeleton h-10 w-full"></div>
+              <div class="skeleton h-3.5 w-full"></div>
+              <div class="skeleton h-3.5 w-3/5"></div>
+              <div class="skeleton h-3.5 w-4/5"></div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </ReportWorkspace>
   </body>
 </html>

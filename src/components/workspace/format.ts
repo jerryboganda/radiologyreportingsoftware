@@ -5,13 +5,12 @@ const dayMonth = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'shor
 const full = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
 /** "14:32" today, "Yesterday", "30 Sep" this year, "30 Sep 2025" otherwise. */
-export function shortDate(iso: string): string {
+export function shortDate(iso: string, now = new Date()): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  if (d.getTime() >= startOfToday) return time.format(d);
-  if (d.getTime() >= startOfToday - 86_400_000) return 'Yesterday';
+  // Calendar midnights, not "minus 24 hours": the day after a clock change is 23 or 25 hours long.
+  if (d.getTime() >= new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) return time.format(d);
+  if (d.getTime() >= new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime()) return 'Yesterday';
   return d.getFullYear() === now.getFullYear() ? dayMonth.format(d) : full.format(d);
 }
 
@@ -24,7 +23,9 @@ export function longDate(value: string | null | undefined): string {
 
 export function elapsed(fromIso: string, now = Date.now()): string {
   const s = Math.max(0, Math.floor((now - new Date(fromIso).getTime()) / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const h = Math.floor(s / 3600);
+  return h ? `${h}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}` : `${Math.floor(s / 60)}:${pad(s % 60)}`;
 }
 
 export const displayName = (r: Pick<ReportItem, 'patientName'>) => r.patientName.trim() || 'Untitled note';
@@ -33,10 +34,18 @@ export function ageSex(r: Pick<ReportItem, 'age' | 'gender'>): string {
   return [r.age.trim(), r.gender.trim()].filter(Boolean).join(' · ');
 }
 
-export const fileName = (path: string) => decodeURIComponent(path.split(/[/\\]/).pop() || path);
+/** Never throws: synced input-folder names are stored raw, so "CT 50%.jpg" is not valid URI encoding. */
+export function fileName(path: string): string {
+  const base = path.split(/[/\\]/).pop() || path;
+  try {
+    return decodeURIComponent(base);
+  } catch {
+    return base;
+  }
+}
 
 /** One entry per line without "1." / "- " markers — the same rule the print page and the wording check use. */
-export { splitLines as toLines } from '../../lib/wording';
+export { splitLines as toLines } from '../../lib/wording.ts';
 
 export interface SheetSection {
   letter: string;

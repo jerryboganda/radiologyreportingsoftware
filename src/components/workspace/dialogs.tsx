@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { BadgeCheck, CircleDashed, Download, History, MessageCircleQuestion, Plus, ShieldCheck, Trash2, TriangleAlert } from 'lucide-react';
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { BadgeCheck, CircleDashed, Download, History, MessageCircleQuestion, Plus, RefreshCw, ShieldCheck, Trash2, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import type { ReportItem } from '../../lib/report';
 import {
@@ -12,8 +12,9 @@ import {
 import type { WordingFlag } from '../../lib/wording';
 import { ENGINE_DEFAULT_LABEL, aiCopy, modelLabel } from '../../lib/aiModel';
 import { cn } from '../../lib/cn';
-import { Button, Kbd } from '../ui/button';
+import { Button, Kbd, fieldClass } from '../ui/button';
 import { Dialog, DialogClose, DialogContent, IconButton, PanelContent } from '../ui/overlay';
+import { Skeleton } from '../ui/status';
 import { ageSex, displayName, longDate, parseSheet } from './format';
 import { WordingList } from './WordingList';
 
@@ -39,11 +40,12 @@ function auditVerdict(r: ReportItem, sheetStatus: string | null, flags: WordingF
   return { tone: 'info', icon: <CircleDashed />, label: 'Pending', note: 'Waiting for the AI to draft and audit this case.' } as const;
 }
 
+// Glossy like the status chips: the soft fill, a same-hue inset ring and the edge light.
 const VERDICT_TONES = {
-  neutral: 'bg-surface-3 text-ink-2',
-  info: 'bg-accent-soft text-accent',
-  warning: 'bg-warning-soft text-warning',
-  success: 'bg-success-soft text-success',
+  neutral: 'bg-surface-3 text-ink-2 ring-line-strong/70',
+  info: 'bg-accent-soft text-accent ring-accent/20',
+  warning: 'bg-warning-soft text-warning ring-warning/25',
+  success: 'bg-success-soft text-success ring-success/25',
 } as const;
 
 export function AuditDialog({
@@ -62,9 +64,11 @@ export function AuditDialog({
   /** The model actually running, named on the audit verdict. */
   aiLabel: string;
 }) {
+  // Parsed once per sheet, not on every keystroke in the report behind it.
+  const sheet = useMemo(() => parseSheet(report?.verificationSheetMarkdown), [report?.verificationSheetMarkdown]);
   if (!report) return null;
   const hasReference = report.auditStatus !== 'LEGACY' && (report.verbatimTranscription?.trim().length ?? 0) >= 15;
-  const { status, sections, preamble } = parseSheet(report.verificationSheetMarkdown);
+  const { status, sections, preamble } = sheet;
   const verdict = auditVerdict(report, status, flags, wordingConfirmed, aiLabel);
 
   return (
@@ -91,9 +95,10 @@ export function AuditDialog({
           </>
         }
       >
-        <div className="space-y-4 px-5 py-4">
+        {/* The panel's own width (not the viewport's) decides when the sheet goes two-column. */}
+        <div className="space-y-4 px-5 py-4 [container:audit/inline-size]">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <span className={cn('inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-sm font-semibold [&_svg]:h-4 [&_svg]:w-4', VERDICT_TONES[verdict.tone])}>
+            <span className={cn('inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-sm font-semibold shadow-edge ring-1 ring-inset [&_svg]:h-4 [&_svg]:w-4', VERDICT_TONES[verdict.tone])}>
               {verdict.icon}
               {verdict.label}
             </span>
@@ -103,7 +108,7 @@ export function AuditDialog({
 
           <section
             aria-label="Wording check"
-            className={cn('rounded-lg border px-4 py-3', flags.length > 0 && !wordingConfirmed ? 'border-warning/30 bg-warning-soft' : 'border-line bg-surface-2')}
+            className={cn('rounded-lg border px-4 py-3 transition-colors duration-base', flags.length > 0 && !wordingConfirmed ? 'border-warning/25 bg-warning-soft' : 'border-line bg-surface-2')}
           >
             <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
               {flags.length > 0 ? <TriangleAlert className="h-4 w-4 text-warning" aria-hidden /> : <BadgeCheck className="h-4 w-4 text-success" aria-hidden />}
@@ -125,10 +130,11 @@ export function AuditDialog({
             )}
           </section>
 
+          {preamble && sections.length > 0 && <p className="whitespace-pre-wrap text-sm text-muted">{preamble}</p>}
           {sections.length ? (
             <dl className="divide-y divide-line overflow-hidden rounded-lg border border-line">
               {sections.map((s) => (
-                <div key={s.letter + s.title} className="grid gap-x-4 gap-y-1 px-4 py-3 md:grid-cols-[10rem_minmax(0,1fr)]">
+                <div key={s.letter + s.title} className="grid gap-x-4 gap-y-1 px-4 py-3 [@container_audit_(min-width:32rem)]:grid-cols-[10rem_minmax(0,1fr)]">
                   <dt className="flex items-start gap-2 text-sm font-semibold text-ink">
                     <span className="grid h-5 w-5 shrink-0 place-items-center rounded bg-surface-3 text-xs font-bold text-brand-ink">{s.letter}</span>
                     {s.title}
@@ -142,9 +148,11 @@ export function AuditDialog({
               {report.verificationSheetMarkdown}
             </pre>
           ) : (
-            <p className="rounded-lg border border-dashed border-line px-4 py-8 text-center text-base text-muted">No verification sheet for this case yet.</p>
+            <div className="rounded-lg border border-line bg-surface-2 px-4 py-8 text-center">
+              <CircleDashed className="mx-auto mb-2 h-5 w-5 text-muted" aria-hidden />
+              <p className="text-base text-muted">No verification sheet for this case yet.</p>
+            </div>
           )}
-          {preamble && sections.length > 0 && <p className="whitespace-pre-wrap text-sm text-muted">{preamble}</p>}
         </div>
       </PanelContent>
     </Dialog>
@@ -182,13 +190,15 @@ export function ApproveDialog({
 
   if (!report) return null;
 
-  const rows: [string, ReactNode][] = [
-    ['Patient', displayName(report)],
-    ['Token', report.tokenNumber.trim() ? `#${report.tokenNumber}` : 'Not stated'],
-    ['Age / sex', ageSex(report) || 'Not stated'],
-    ['Study', report.modality || 'Not stated'],
-    ['Exam date', longDate(report.studyDate) || 'Not stated'],
+  // Never truncated: this is the moment the resident confirms the right patient and study.
+  const rows: [string, string][] = [
+    ['Patient', report.patientName.trim()],
+    ['Token', report.tokenNumber.trim() && `#${report.tokenNumber.trim()}`],
+    ['Age / sex', ageSex(report)],
+    ['Study', report.modality.trim()],
+    ['Exam date', longDate(report.studyDate)],
   ];
+  const terms = new Set(flags.map((f) => f.term)).size;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
@@ -216,26 +226,31 @@ export function ApproveDialog({
                 }
               }}
             >
-              {!busy && <Download className="h-4 w-4" />}
-              {busy ? 'Generating PDF…' : 'Approve & download'}
+              <Download className="h-4 w-4" />
+              Approve & download
             </Button>
           </>
         }
       >
         <div className="space-y-4 px-5 py-4">
+          <span role="status" className="sr-only">
+            {busy ? 'Generating PDF…' : ''}
+          </span>
           <dl className="divide-y divide-line rounded-lg border border-line">
             {rows.map(([k, v]) => (
               <div key={k} className="flex items-baseline justify-between gap-4 px-3.5 py-2">
-                <dt className="text-sm text-muted">{k}</dt>
-                <dd className="min-w-0 truncate text-right text-base font-medium tabular-nums text-ink">{v}</dd>
+                <dt className="shrink-0 text-sm text-muted">{k}</dt>
+                <dd className="min-w-0 break-words text-right text-base font-medium tabular-nums text-ink [overflow-wrap:anywhere]">
+                  {v || <span className="font-normal italic text-muted">Not stated</span>}
+                </dd>
               </div>
             ))}
           </dl>
           {flags.length > 0 && (
-            <div className={cn('rounded-lg border px-3.5 py-3', needsWording ? 'border-warning/30 bg-warning-soft' : 'border-line bg-surface-2')}>
+            <div className={cn('rounded-lg border px-3.5 py-3 transition-colors duration-base', needsWording ? 'border-warning/25 bg-warning-soft' : 'border-line bg-surface-2')}>
               <p className="flex items-center gap-2 text-sm font-semibold text-ink">
                 <TriangleAlert className={cn('h-4 w-4', needsWording ? 'text-warning' : 'text-muted')} aria-hidden />
-                {needsWording ? `Not in the senior’s note: ${new Set(flags.map((f) => f.term)).size} term${new Set(flags.map((f) => f.term)).size === 1 ? '' : 's'}` : 'You already confirmed these terms'}
+                {needsWording ? `Not in the senior’s note: ${terms} term${terms === 1 ? '' : 's'}` : 'You already confirmed these terms'}
               </p>
               <WordingList flags={flags} limit={6} className="mt-1.5" />
               {needsWording && (
@@ -280,12 +295,40 @@ const SHORTCUTS: [string[], string][] = [
   [['Esc'], 'Close a dialog'],
 ];
 
+/** The handler accepts ⌘ as well as Ctrl; Mac keyboards are shown their own key. */
+const MOD = typeof navigator !== 'undefined' && /Mac|iP/.test(navigator.platform) ? '⌘' : 'Ctrl';
+
 /* ---------- AI settings ---------- */
 
 const ENGINE_OPTIONS = [
   { value: 'antigravity', label: 'Antigravity (agy CLI)' },
   { value: 'opencode', label: 'OpenCode gateway' },
 ] as const;
+
+type LoadState = 'loading' | 'ready' | 'error';
+
+/**
+ * An engine's own live list (`agy models` for Antigravity, the gateway for OpenCode). Only when the worker has
+ * reported nothing yet does Antigravity fall back to its default model.
+ */
+const engineModels = (byEngine: Record<string, string[]>, engine: string) => {
+  const reported = byEngine[engine] ?? [];
+  return reported.length ? reported : engine === 'antigravity' ? [ENGINE_DEFAULT_LABEL.antigravity] : [];
+};
+
+/** Inline failure line for a dialog whose saved values could not be read; Save stays locked until they load. */
+function LoadError({ what, onRetry }: { what: string; onRetry: () => void }) {
+  return (
+    <div role="alert" className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-danger/25 bg-danger-soft px-3 py-2 text-sm text-ink-2">
+      <TriangleAlert className="h-4 w-4 shrink-0 text-danger" aria-hidden />
+      <span className="min-w-0 flex-1">Couldn’t load {what}.</span>
+      <Button variant="ghost" size="sm" onClick={onRetry} className="-my-1">
+        <RefreshCw className="h-3.5 w-3.5" />
+        Retry
+      </Button>
+    </div>
+  );
+}
 
 export function SettingsDialog({
   open,
@@ -294,8 +337,6 @@ export function SettingsDialog({
   workerModelsByEngine,
   workerModelLabels,
   workerVariants,
-  workerEngine,
-  workerModel,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -304,30 +345,47 @@ export function SettingsDialog({
   workerModelsByEngine: Record<string, string[]>;
   workerModelLabels: Record<string, Record<string, string>>;
   workerVariants: Record<string, string[]>;
-  workerEngine: string | null;
-  workerModel: string | null;
+  workerEngine?: string | null;
+  workerModel?: string | null;
 }) {
+  const id = useId();
   const [engine, setEngine] = useState('antigravity');
   const [model, setModel] = useState('');
   const [variant, setVariant] = useState('');
+  const [load, setLoad] = useState<LoadState>('loading');
+  const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [fetchNote, setFetchNote] = useState('');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; detail: string } | null>(null);
+  // Bumped when the dialog closes, so a connection test still polling gives up instead of running on unseen.
+  const testRun = useRef(0);
 
+  // Until the saved settings arrive the fields are locked: a quick Save must never write the defaults over them.
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    setLoad('loading');
     fetch('/api/settings')
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((s) => {
         if (cancelled) return;
         setEngine(typeof s.engine === 'string' ? s.engine : 'antigravity');
         setModel(typeof s.model === 'string' ? s.model : '');
         setVariant(typeof s.variant === 'string' ? s.variant : '');
+        setLoad('ready');
       })
-      .catch(() => {});
+      .catch(() => !cancelled && setLoad('error'));
+    return () => {
+      cancelled = true;
+    };
+  }, [open, attempt]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setTestResult(null);
     // Opening the dialog asks the worker to re-list models; the updated list arrives on its next heartbeat.
     setFetching(true);
     setFetchNote('Asking the worker for the current model list…');
@@ -338,22 +396,29 @@ export function SettingsDialog({
       });
     return () => {
       cancelled = true;
+      testRun.current++;
+      setTesting(false);
     };
   }, [open]);
 
-  // When a fresh model list arrives, the placeholder note clears.
+  // When a fresh model list arrives, the placeholder note and the fetching state clear (the 3s timer is only a fallback).
   const engineCatalog = workerModelsByEngine[engine] ?? [];
   const engineLabels = workerModelLabels[engine] ?? {};
   useEffect(() => {
-    if (engineCatalog.length > 0) setFetchNote('');
+    if (engineCatalog.length > 0) {
+      setFetchNote('');
+      setFetching(false);
+    }
   }, [engineCatalog]);
+
+  const engineName = (e: string) => ENGINE_OPTIONS.find((o) => o.value === e)?.label ?? e;
 
   const fetchModels = async () => {
     setFetching(true);
     setFetchNote('Fetching the latest models from the worker…');
     try {
       await fetch('/api/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'fetch_models' }) });
-      setFetchNote(`The worker re-asks the ${ENGINE_OPTIONS.find((o) => o.value === engine)?.label ?? engine} for its models; the list updates within a few seconds. Is the worker online? If it stays empty, start it.`);
+      setFetchNote(`The worker re-asks the ${engineName(engine)} for its models; the list updates within a few seconds. Is the worker online? If it stays empty, start it.`);
     } catch {
       setFetchNote('Could not reach the app server.');
     } finally {
@@ -362,6 +427,7 @@ export function SettingsDialog({
   };
 
   const testConnection = async () => {
+    const run = ++testRun.current;
     setTesting(true);
     setTestResult(null);
     const startedAt = Date.now();
@@ -369,6 +435,7 @@ export function SettingsDialog({
       await fetch('/api/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'request_test', engine, model: model.trim(), variant: effectiveVariant }) });
       for (;;) {
         await new Promise((r) => setTimeout(r, 2000));
+        if (testRun.current !== run) return;
         const q = await fetch('/api/queue').then((r) => r.json()).catch(() => null);
         const t = q?.lastTest;
         if (t && t.at >= startedAt && t.engine === engine && t.model === model.trim() && String(t.variant ?? '') === effectiveVariant) {
@@ -381,20 +448,15 @@ export function SettingsDialog({
         }
       }
     } catch (error) {
-      setTestResult({ ok: false, detail: (error as Error).message });
+      if (testRun.current === run) setTestResult({ ok: false, detail: (error as Error).message });
     } finally {
-      setTesting(false);
+      if (testRun.current === run) setTesting(false);
     }
   };
 
-  /**
-   * The selected engine's own live list (`agy models` for Antigravity, the gateway for OpenCode).
-   * Only when the worker has reported nothing yet does Antigravity fall back to its default model, and
-   * the saved model is always kept visible even if the list is stale.
-   */
+  // The saved model is always kept visible even if the list is stale.
   const modelOptions = useMemo(() => {
-    const reported = workerModelsByEngine[engine] ?? [];
-    const opts = reported.length ? reported : engine === 'antigravity' ? [ENGINE_DEFAULT_LABEL.antigravity] : [];
+    const opts = engineModels(workerModelsByEngine, engine);
     return model && !opts.includes(model) ? [...opts, model] : [...opts];
   }, [engine, workerModelsByEngine, model]);
 
@@ -421,6 +483,9 @@ export function SettingsDialog({
     }
   };
 
+  const ready = load === 'ready';
+  const field = (control: ReactNode) => (ready ? control : <Skeleton className="h-9 coarse:h-11" />);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -433,105 +498,147 @@ export function SettingsDialog({
               Letterhead and sign-off…
             </Button>
             <DialogClose asChild>
-              <Button variant="ghost">Cancel</Button>
+              <Button>Cancel</Button>
             </DialogClose>
-            <Button onClick={save} loading={busy}>
+            <Button variant="primary" onClick={save} loading={busy} disabled={!ready}>
               Save
             </Button>
           </>
         }
       >
         <div className="space-y-4 px-5 py-4">
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-ink">Engine</span>
-            <select
-              value={engine}
-              onChange={(e) => setEngine(e.target.value)}
-              className="h-10 w-full rounded-md border border-line bg-surface px-3 text-base text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
-            >
-              {ENGINE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-ink">Model</span>
-            {modelOptions.length > 0 ? (
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                data-model-select
-                className="h-10 w-full rounded-md border border-line bg-surface px-3 text-base text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
-              >
-                {modelOptions.map((m) => (
-                  <option key={m} value={m}>
-                    {engineLabels[m] ?? modelLabel(m)}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder="e.g. deepseek-v4.1-flash"
-                className="h-10 w-full rounded-md border border-line bg-surface px-3 text-base text-ink placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
-              />
-            )}
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs text-muted">
-                {fetching
-                  ? 'Fetching models…'
-                  : engineCatalog.length > 0
-                    ? `${engineCatalog.length} model${engineCatalog.length === 1 ? '' : 's'} reported for ${ENGINE_OPTIONS.find((o) => o.value === engine)?.label ?? engine}.`
-                    : 'No models reported — start the worker or fetch again.'}
+          {load === 'error' && <LoadError what="the saved AI settings" onRetry={() => setAttempt((a) => a + 1)} />}
+          <fieldset disabled={!ready} aria-busy={load === 'loading'} className="min-w-0 space-y-4">
+            <div className="space-y-1.5">
+              <label htmlFor={`${id}-engine`} className="block text-sm font-medium text-ink">
+                Engine
+              </label>
+              {field(
+                <select
+                  id={`${id}-engine`}
+                  value={engine}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setEngine(next);
+                    // The previous engine's model would otherwise be saved against this one.
+                    setModel(engineModels(workerModelsByEngine, next)[0] ?? '');
+                    setVariant('');
+                  }}
+                  className={fieldClass}
+                >
+                  {ENGINE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>,
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor={`${id}-model`} className="block text-sm font-medium text-ink">
+                Model
+              </label>
+              {field(
+                modelOptions.length > 0 ? (
+                  <select id={`${id}-model`} value={model} onChange={(e) => setModel(e.target.value)} aria-describedby={`${id}-model-help`} data-model-select className={fieldClass}>
+                    {modelOptions.map((m) => (
+                      <option key={m} value={m}>
+                        {engineLabels[m] ?? modelLabel(m)}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    id={`${id}-model`}
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    placeholder="e.g. deepseek-v4.1-flash"
+                    aria-describedby={`${id}-model-help`}
+                    className={fieldClass}
+                  />
+                ),
+              )}
+              <div className="flex items-start justify-between gap-2">
+                <div id={`${id}-model-help`} role="status" className="min-w-0 space-y-1 pt-1.5 text-sm text-muted">
+                  <p>
+                    {fetching
+                      ? 'Fetching models…'
+                      : engineCatalog.length > 0
+                        ? `${engineCatalog.length} model${engineCatalog.length === 1 ? '' : 's'} reported for ${engineName(engine)}.`
+                        : 'No models reported. Start the worker or fetch again.'}
+                  </p>
+                  {fetchNote && <p>{fetchNote}</p>}
+                </div>
+                <Button variant="ghost" size="sm" onClick={fetchModels} loading={fetching} className="-mr-2 text-accent hover:text-accent">
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Fetch latest
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor={`${id}-effort`} className="block text-sm font-medium text-ink">
+                Reasoning effort
+              </label>
+              {field(
+                variantOptions.length > 0 ? (
+                  <select id={`${id}-effort`} value={effectiveVariant} onChange={(e) => setVariant(e.target.value)} aria-describedby={`${id}-effort-help`} className={fieldClass}>
+                    <option value="">Default (whatever the model uses)</option>
+                    {variantOptions.map((v) => (
+                      <option key={v} value={v}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-sm text-muted">No selectable reasoning effort for this model.</p>
+                ),
+              )}
+              <p id={`${id}-effort-help`} className="text-sm text-muted">
+                Updates from the selected model above; saved per engine and model.
               </p>
-              <button type="button" onClick={fetchModels} disabled={fetching} className="text-xs font-medium text-accent hover:underline disabled:opacity-50">
-                Fetch latest
-              </button>
             </div>
-            <p className="text-xs text-muted">{fetchNote}</p>
-          </label>
 
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-ink">Reasoning effort</span>
-            {variantOptions.length > 0 ? (
-              <select
-                value={effectiveVariant}
-                onChange={(e) => setVariant(e.target.value)}
-                className="h-10 w-full rounded-md border border-line bg-surface px-3 text-base text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
-              >
-                <option value="">Default (whatever the model uses)</option>
-                {variantOptions.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <p className="text-xs text-muted">No selectable reasoning effort for this model.</p>
-            )}
-            <p className="text-xs text-muted">Updates from the selected model above; saved per engine and model.</p>
-          </label>
-
-          <div className="rounded-md border border-line bg-surface-2 px-3 py-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-medium text-ink">Connection test</span>
-              <Button variant="secondary" size="sm" onClick={testConnection} loading={testing}>
-                Test connection
-              </Button>
+            <div className="rounded-md border border-line bg-surface-2 px-3 py-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium text-ink">Connection test</span>
+                <Button variant="secondary" size="sm" onClick={testConnection} loading={testing}>
+                  Test connection
+                </Button>
+              </div>
+              {/* The result can arrive minutes later, so it is announced. */}
+              <div role="status" className="mt-1.5 break-words text-sm [overflow-wrap:anywhere]">
+                {testing ? (
+                  <p className="text-muted">
+                    Asking the {engine} worker to run {model}
+                    {effectiveVariant ? ` (${effectiveVariant})` : ''} on a one-word prompt…
+                  </p>
+                ) : testResult ? (
+                  <p className="flex items-start gap-1.5 text-ink-2">
+                    {testResult.ok ? (
+                      <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
+                    ) : (
+                      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden />
+                    )}
+                    <span className="min-w-0">
+                      {testResult.ok ? (
+                        <>
+                          <span className="font-medium text-success">Connected</span> · {engine} responded{testResult.detail ? `: ${testResult.detail}` : ''}
+                        </>
+                      ) : (
+                        <>
+                          <span className="font-medium text-danger">Failed</span> · {testResult.detail}
+                        </>
+                      )}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="text-muted">Asks the AI worker to run the selected engine and model once, then shows the reply or the error.</p>
+                )}
+              </div>
             </div>
-            <p className="mt-1.5 text-xs text-muted">
-              {testing
-                ? `Asking the ${engine} worker to run ${model}${effectiveVariant ? ` (${effectiveVariant})` : ''} on a one-word prompt…`
-                : testResult
-                  ? testResult.ok
-                    ? `OK — ${engine} responded${testResult.detail ? `: ${testResult.detail}` : ''}`
-                    : `FAILED — ${testResult.detail}`
-                  : "Asks the AI worker to run the selected engine and model once; reports OK or the error."}
-            </p>
-          </div>
+          </fieldset>
         </div>
       </DialogContent>
     </Dialog>
@@ -540,7 +647,9 @@ export function SettingsDialog({
 
 /* ---------- Letterhead & sign-off ---------- */
 
+// In printed order: the government line heads the letterhead.
 const PROFILE_TEXT_FIELDS: [keyof Omit<InstitutionProfile, 'reportingRadiologists'>, string][] = [
+  ['government', 'Government line'],
   ['department', 'Department (letterhead)'],
   ['hospital', 'Hospital (letterhead)'],
   ['hod', 'Head of Department'],
@@ -549,56 +658,63 @@ const PROFILE_TEXT_FIELDS: [keyof Omit<InstitutionProfile, 'reportingRadiologist
   ['footer', 'Footer line'],
 ];
 
-const inputClass =
-  'h-10 w-full rounded-md border border-line bg-surface px-3 text-base text-ink placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20';
-
 /**
  * The printed letterhead and sign-off. Edits are saved as the profile every case created from now on
  * prints with; cases that already exist keep the profile they were issued with.
  */
 export function SignOffSettings({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const [profile, setProfile] = useState<InstitutionProfile>(() => defaultProfile());
-  const [busy, setBusy] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [load, setLoad] = useState<LoadState>('loading');
+  const [attempt, setAttempt] = useState(0);
+  // The row just added takes focus; after a removal focus returns to Add.
+  const [focusRow, setFocusRow] = useState<number | null>(null);
+  const addRef = useRef<HTMLButtonElement>(null);
 
+  // Locked until the saved profile arrives, so nothing typed into the defaults is overwritten when it lands.
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    setLoad('loading');
+    setFocusRow(null);
     fetch('/api/settings')
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((s) => {
         if (cancelled) return;
         setProfile(sanitizeProfile(s.institution));
-        setLoaded(true);
+        setLoad('ready');
       })
-      .catch(() => {});
+      .catch(() => !cancelled && setLoad('error'));
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, attempt]);
 
-  const write = async (next: InstitutionProfile, message: string) => {
-    setBusy(true);
+  const save = async () => {
+    setSaving(true);
     try {
       const res = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ institution: next }),
+        body: JSON.stringify({ institution: profile }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Could not save the letterhead');
-      setProfile(sanitizeProfile(data.institution ?? next));
-      toast.success(message);
+      setProfile(sanitizeProfile(data.institution ?? profile));
+      toast.success('Letterhead and sign-off saved · every new report prints this');
     } catch (error) {
       toast.error('Could not save the letterhead', { description: (error as Error).message });
     } finally {
-      setBusy(false);
+      setSaving(false);
     }
   };
 
-  const save = () => void write(profile, 'Letterhead and sign-off saved — every new report prints this');
-
-  const reset = () => void write(defaultProfile(), 'Letterhead and sign-off reset to the GMCTH defaults');
+  // Local only: Save stays the single write, and Cancel still leaves the stored letterhead untouched.
+  const reset = () => {
+    setProfile(defaultProfile());
+    setFocusRow(null);
+    toast('GMCTH defaults filled in', { description: 'Save to keep them; Cancel leaves the letterhead as it was.' });
+  };
 
   const setField = (key: keyof InstitutionProfile, value: string) => setProfile((p) => ({ ...p, [key]: value }));
   const setRadiologist = (index: number, patch: Partial<Radiologist>) =>
@@ -607,102 +723,111 @@ export function SignOffSettings({ open, onOpenChange }: { open: boolean; onOpenC
       reportingRadiologists: p.reportingRadiologists.map((doc, i) => (i === index ? { ...doc, ...patch } : doc)),
     }));
 
+  const ready = load === 'ready';
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
+      {/* A large form: a stray click outside must not throw the edits away. */}
       <DialogContent
         size="lg"
         title="Letterhead and sign-off"
         description="The fixed parts printed on every report. Also editable in place on the report sheet."
+        onInteractOutside={(e) => e.preventDefault()}
         footer={
           <>
-            <Button variant="ghost" onClick={reset} loading={busy} className="mr-auto">
+            <Button variant="ghost" onClick={reset} disabled={!ready || saving} className="mr-auto">
               Reset to GMCTH defaults
             </Button>
             <DialogClose asChild>
-              <Button variant="ghost">Cancel</Button>
+              <Button>Cancel</Button>
             </DialogClose>
-            <Button onClick={save} loading={busy} disabled={!loaded}>
+            <Button variant="primary" onClick={() => void save()} loading={saving} disabled={!ready}>
               Save
             </Button>
           </>
         }
       >
         <div className="space-y-4 px-5 py-4">
-          <section aria-label="Reporting radiologists" className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-ink">Primary reporting radiologists</h3>
-              <Button
-                variant="subtle"
-                size="sm"
-                onClick={() =>
-                  setProfile((p) => ({
-                    ...p,
-                    reportingRadiologists: [...p.reportingRadiologists, { name: '', qualification: '' }],
-                  }))
-                }
-                disabled={busy || profile.reportingRadiologists.length >= MAX_REPORTERS}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add radiologist
-              </Button>
-            </div>
-            {profile.reportingRadiologists.length === 0 && <p className="text-xs text-muted">No radiologists listed; the block prints empty.</p>}
-            <ul className="space-y-2">
-              {profile.reportingRadiologists.map((doc, index) => (
-                <li key={index} className="flex items-center gap-2">
-                  <input
-                    value={doc.name}
-                    onChange={(e) => setRadiologist(index, { name: e.target.value })}
-                    placeholder="Name"
-                    aria-label={`Radiologist ${index + 1} name`}
-                    className={inputClass}
-                  />
-                  <input
-                    value={doc.qualification}
-                    onChange={(e) => setRadiologist(index, { qualification: e.target.value })}
-                    placeholder="Qualification"
-                    aria-label={`Radiologist ${index + 1} qualification`}
-                    className={inputClass}
-                  />
-                  <IconButton
-                    label={`Remove ${doc.name || `radiologist ${index + 1}`}`}
-                    variant="ghost"
-                    onClick={() =>
-                      setProfile((p) => ({ ...p, reportingRadiologists: p.reportingRadiologists.filter((_, i) => i !== index) }))
-                    }
-                    disabled={busy}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </IconButton>
-                </li>
+          {load === 'error' && <LoadError what="the saved letterhead" onRetry={() => setAttempt((a) => a + 1)} />}
+          <fieldset disabled={!ready || saving} aria-busy={load === 'loading'} className="min-w-0 space-y-4">
+            <section aria-label="Reporting radiologists" className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-ink">Primary reporting radiologists</h3>
+                <Button
+                  ref={addRef}
+                  variant="subtle"
+                  size="sm"
+                  onClick={() => {
+                    setFocusRow(profile.reportingRadiologists.length);
+                    setProfile((p) => ({
+                      ...p,
+                      reportingRadiologists: [...p.reportingRadiologists, { name: '', qualification: '' }],
+                    }));
+                  }}
+                  disabled={profile.reportingRadiologists.length >= MAX_REPORTERS}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add radiologist
+                </Button>
+              </div>
+              {!ready ? (
+                <Skeleton className="h-9 coarse:h-11" />
+              ) : profile.reportingRadiologists.length === 0 ? (
+                <p className="text-sm text-muted">No radiologists listed; the block prints empty.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {profile.reportingRadiologists.map((doc, index) => (
+                    // Phones: name and remove on one row, the qualification beneath.
+                    <li key={index} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                      <input
+                        value={doc.name}
+                        onChange={(e) => setRadiologist(index, { name: e.target.value })}
+                        placeholder="Name"
+                        aria-label={`Radiologist ${index + 1} name`}
+                        autoFocus={index === focusRow}
+                        className={fieldClass}
+                      />
+                      <input
+                        value={doc.qualification}
+                        onChange={(e) => setRadiologist(index, { qualification: e.target.value })}
+                        placeholder="Qualification"
+                        aria-label={`Radiologist ${index + 1} qualification`}
+                        className={cn(fieldClass, 'max-sm:col-start-1 max-sm:row-start-2')}
+                      />
+                      <IconButton
+                        label={`Remove ${doc.name || `radiologist ${index + 1}`}`}
+                        variant="ghost"
+                        onClick={() => {
+                          setFocusRow(null);
+                          setProfile((p) => ({ ...p, reportingRadiologists: p.reportingRadiologists.filter((_, i) => i !== index) }));
+                          requestAnimationFrame(() => addRef.current?.focus());
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </IconButton>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section aria-label="Letterhead and footer text" className="grid gap-3 sm:grid-cols-2">
+              {PROFILE_TEXT_FIELDS.map(([key, label]) => (
+                <label key={key} className={cn('block space-y-1.5', key === 'footer' && 'sm:col-span-2')}>
+                  <span className="block text-sm font-medium text-ink">{label}</span>
+                  {ready ? (
+                    <input value={profile[key] as string} onChange={(e) => setField(key, e.target.value)} className={fieldClass} />
+                  ) : (
+                    <Skeleton className="h-9 coarse:h-11" />
+                  )}
+                </label>
               ))}
-            </ul>
-          </section>
+            </section>
 
-          <section aria-label="Letterhead and footer text" className="grid gap-3 sm:grid-cols-2">
-            {PROFILE_TEXT_FIELDS.map(([key, label]) => (
-              <label key={key} className="block space-y-1.5">
-                <span className="text-sm font-medium text-ink">{label}</span>
-                <input
-                  value={profile[key] as string}
-                  onChange={(e) => setField(key, e.target.value)}
-                  className={inputClass}
-                />
-              </label>
-            ))}
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-ink">Government line</span>
-              <input
-                value={profile.government}
-                onChange={(e) => setField('government', e.target.value)}
-                className={inputClass}
-              />
-            </label>
-          </section>
-
-          <p className="text-xs text-muted">
-            Reports already issued keep the letterhead they were printed with. The document reference is generated per case.
-          </p>
+            <p className="text-sm text-muted">
+              Reports already issued keep the letterhead they were printed with. The document reference is generated per case.
+            </p>
+          </fieldset>
         </div>
       </DialogContent>
     </Dialog>
@@ -719,7 +844,15 @@ export function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenC
               <span className="text-base text-ink-2">{label}</span>
               <span className="flex items-center gap-1">
                 {keys.map((k, i) => (
-                  <Kbd key={k} className={cn(i > 0 && keys[0] !== 'Ctrl' && 'ml-1')}>{k}</Kbd>
+                  <Fragment key={k}>
+                    {/* A chord reads as one combination, not a sequence. */}
+                    {i > 0 && keys[0] === 'Ctrl' && (
+                      <span className="text-xs text-muted" aria-hidden>
+                        +
+                      </span>
+                    )}
+                    <Kbd className={cn(i > 0 && keys[0] !== 'Ctrl' && 'ml-1')}>{k === 'Ctrl' ? MOD : k}</Kbd>
+                  </Fragment>
                 ))}
               </span>
             </li>

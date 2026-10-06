@@ -1,6 +1,9 @@
 // UI verification: every case state × viewport × theme, served from SYNTHETIC fixtures via request
 // interception (no patient data, all writes blocked). Fails on horizontal overflow, clipped or
-// wrapped header/toolbar controls, unnamed icon buttons and runtime errors.
+// wrapped header/toolbar controls, clipped sheet fields, menu items without their base layout, dialog
+// footers outside the dialog, unreachable section-nav items, an overflowing phone action bar, unnamed
+// icon buttons, more than one shimmer ring (or one on a disabled control), anything still moving 1s
+// after load under reduced motion, and runtime errors.
 //
 //   node scripts/verify_ui_screenshot.cjs [baseUrl=http://127.0.0.1:4321] [outDir=.ui-check]
 const fs = require('fs');
@@ -44,6 +47,8 @@ const localName = (id) =>
     .join(' ');
 // Replaced by the app's own helper (src/lib/aiModel.ts) once the run starts.
 let workerName = localName(WORKER_MODEL);
+// What GET /api/settings really returns: the stored profile merged over the factory defaults (src/lib/institution.ts).
+let SETTINGS_INSTITUTION = {};
 const CHROME = [
   process.env.CHROME_PATH,
   '/usr/bin/chromium',
@@ -149,16 +154,22 @@ const CASES = {
   failed: { ...blank, id: 'syn-failed', patientName: 'Synthetic Patient C', status: 'FAILED', lastError: 'agy exited with code 1: quota exceeded for gemini-3.8-flash-high', createdAt: iso(7), updatedAt: iso(3) },
   finalized: { ...base, id: 'syn-final', patientName: 'Synthetic Patient D', status: 'FINALIZED', createdAt: iso(8), updatedAt: iso(1) },
   archived: { ...base, id: 'syn-arch', patientName: 'Synthetic Patient E', isArchived: true, createdAt: iso(9), updatedAt: iso(9) },
+  // Create Report: findings typed or dictated, no photo.
+  typed: { ...base, id: 'syn-typed', patientName: 'Synthetic Patient H', imagePath: '', sourceText: `Synthetic typed findings\n${base.verbatimTranscription}`, createdAt: iso(10), updatedAt: iso(10) },
 };
 // The flagged cases only appear in the lists of the wording scenarios, so every other screen proves a clean draft shows no warning.
-const listWith = (first) => [CASES[first], ...Object.entries(CASES).filter(([k]) => k !== first && !k.startsWith('flagged')).map(([, v]) => v)];
+// The typed case likewise only appears in its own scenarios.
+const listWith = (first) => [CASES[first], ...Object.entries(CASES).filter(([k]) => k !== first && !k.startsWith('flagged') && k !== 'typed').map(([, v]) => v)];
 
 /* ---------- scenarios ---------- */
 
 const DESKTOP = [
+  { w: 1024, h: 768 },
   { w: 1280, h: 800 },
   { w: 1366, h: 768 },
+  { w: 1440, h: 900 },
   { w: 1920, h: 1080 },
+  { w: 2560, h: 1440 },
 ];
 const scenarios = [
   ...DESKTOP.flatMap((v) => ['light', 'dark'].map((scheme) => ({ name: `draft-${v.w}-${scheme}`, ...v, scheme, list: listWith('draft'), online: true }))),
@@ -188,6 +199,24 @@ const scenarios = [
   { name: 'wording-audit-1366-light', w: 1366, h: 768, scheme: 'light', list: listWith('flagged'), online: true, flagged: true, step: 'audit' },
   { name: 'wording-approve-1366-light', w: 1366, h: 768, scheme: 'light', list: listWith('flagged'), online: true, flagged: true, step: 'approve' },
   { name: 'wording-phone-390-light', w: 390, h: 844, scheme: 'light', list: listWith('flagged'), online: true, flagged: true, touch: true },
+  // Smallest phone: the sheet, the More menu and the dialog footers must all fit 320px.
+  { name: 'phone-320-light', w: 320, h: 640, scheme: 'light', list: listWith('draft'), online: true, touch: true },
+  { name: 'phone-320-menu', w: 320, h: 640, scheme: 'light', list: listWith('draft'), online: true, touch: true, step: 'menu' },
+  { name: 'phone-390-menu', w: 390, h: 844, scheme: 'dark', list: listWith('draft'), online: true, touch: true, step: 'menu' },
+  { name: 'phone-320-settings', w: 320, h: 640, scheme: 'light', list: listWith('draft'), online: true, touch: true, step: 'settings' },
+  { name: 'phone-390-settings', w: 390, h: 844, scheme: 'light', list: listWith('draft'), online: true, touch: true, step: 'settings' },
+  { name: 'phone-320-approve', w: 320, h: 640, scheme: 'light', list: listWith('draft'), online: true, touch: true, step: 'approve' },
+  { name: 'phone-390-approve', w: 390, h: 844, scheme: 'light', list: listWith('draft'), online: true, touch: true, step: 'approve' },
+  // Sidebar open at 1366: the narrowest desktop sheet (letterhead, then the sign-off and footer).
+  { name: 'sidebar-open-1366-light', w: 1366, h: 768, scheme: 'light', list: listWith('draft'), online: true, sidebar: true },
+  { name: 'sidebar-open-end-1366-light', w: 1366, h: 768, scheme: 'light', list: listWith('draft'), online: true, sidebar: true, step: 'end' },
+  // Typed findings (Create Report, no photo): the typed text stands in for the note.
+  { name: 'typed-1366-light', w: 1366, h: 768, scheme: 'light', list: listWith('typed'), online: true, typed: true },
+  { name: 'typed-phone-390-light', w: 390, h: 844, scheme: 'light', list: listWith('typed'), online: true, touch: true, typed: true, step: 'note' },
+  // Motion on: the develop reveal, pills and layout springs must leave the same clean screen.
+  { name: 'draft-motion-1366-light', w: 1366, h: 768, scheme: 'light', list: listWith('draft'), online: true, motion: true },
+  { name: 'draft-motion-1920-dark', w: 1920, h: 1080, scheme: 'dark', list: listWith('draft'), online: true, motion: true },
+  { name: 'phone-390-motion-light', w: 390, h: 844, scheme: 'light', list: listWith('draft'), online: true, touch: true, motion: true },
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -209,6 +238,11 @@ async function run() {
   } catch (e) {
     console.log('(using the local label fallback: could not load src/lib/aiModel.ts: ' + e.message + ')');
   }
+  try {
+    SETTINGS_INSTITUTION = (await import('../src/lib/institution.ts')).defaultProfile();
+  } catch (e) {
+    console.log('(settings fixture without a profile: could not load src/lib/institution.ts: ' + e.message + ')');
+  }
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--hide-scrollbars'] });
   const failures = [];
 
@@ -219,6 +253,12 @@ async function run() {
       { name: 'prefers-color-scheme', value: s.scheme },
       { name: 'prefers-reduced-motion', value: s.motion ? 'no-preference' : 'reduce' },
     ]);
+    if (s.sidebar)
+      await page.evaluateOnNewDocument(() => {
+        try {
+          localStorage.setItem('sidebar-open', 'true');
+        } catch {}
+      });
     const errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));
     page.on('console', (m) => m.type() === 'error' && !/favicon/i.test(m.text()) && errors.push(m.text()));
@@ -239,7 +279,7 @@ async function run() {
           workerEngineModels: { antigravity: AGY_IDS, opencode: GW_IDS },
           workerEngineLabels: { antigravity: LABELS },
         });
-      if (url.pathname === '/api/settings' && req.method() === 'GET') return json(200, { engine: s.settingsEngine || 'antigravity', model: s.settingsModel || 'gemini-3.8-flash-high', variant: '', institution: {} });
+      if (url.pathname === '/api/settings' && req.method() === 'GET') return json(200, { engine: s.settingsEngine || 'antigravity', model: s.settingsModel || 'gemini-3.8-flash-high', variant: '', institution: SETTINGS_INSTITUTION });
       // The Settings dialog asks the worker to re-list models; answer it locally instead of letting it 409.
       if (url.pathname === '/api/queue' && req.method() === 'POST') return json(200, { ok: true });
       if (url.pathname.startsWith('/api/') || req.method() !== 'GET') return json(409, { error: 'UI verification run: writes are disabled' });
@@ -248,14 +288,56 @@ async function run() {
     });
 
     await page.goto(`${BASE}/`, { waitUntil: 'networkidle0', timeout: 30000 });
+    const loadedAt = Date.now();
     await page.evaluate(() => document.fonts.ready);
     await sleep(500);
+    // Motion on: let the intro cascade (900ms budget) and the develop/entrance moments settle before measuring.
+    if (s.motion) await sleep(700);
+
+    // Reduced motion: 1s after load nothing may still be moving. A running animation that touches transform
+    // (or translate/scale/rotate) fails only if the element really moves across a 150ms sample, so the
+    // contract's identity transforms (plain fades) pass. Checked before any step opens a dialog.
+    let moving = [];
+    if (!s.motion) {
+      await sleep(Math.max(0, 1000 - (Date.now() - loadedAt)));
+      moving = await page.evaluate(async () => {
+        const MOVES = /transform|translate|scale|rotate/i;
+        const running = document
+          .getAnimations()
+          .filter((a) => a.playState === 'running' && a.effect?.target && a.effect.getKeyframes().some((k) => Object.keys(k).some((p) => MOVES.test(p))));
+        const read = (a) => {
+          const cs = getComputedStyle(a.effect.target, a.effect.pseudoElement || null);
+          return [cs.transform, cs.translate, cs.scale, cs.rotate].join('|');
+        };
+        const before = running.map(read);
+        await new Promise((r) => setTimeout(r, 150));
+        const label = (a) => {
+          const t = a.effect.target;
+          const cls = String(t.className?.baseVal ?? t.className ?? '').trim().split(/\s+/).slice(0, 3).join('.');
+          return `${a.animationName || a.transitionProperty || 'animation'} on ${t.tagName.toLowerCase()}${a.effect.pseudoElement || ''}${cls ? '.' + cls : ''}`;
+        };
+        return running.filter((a, i) => a.playState === 'running' && read(a) !== before[i]).map(label);
+      });
+    }
 
     const clickText = (re) => page.evaluate((src) => [...document.querySelectorAll('button')].find((b) => new RegExp(src).test(b.textContent) && !b.disabled)?.click(), re.source);
     if (s.step === 'audit') await page.click('button[aria-label="Audit sheet"]');
     if (s.step === 'approve') await clickText(/Approve & download/);
     if (s.step === 'note') await clickText(/^Note$/);
-    if (s.step === 'settings') await page.click('button[aria-label="AI settings"]');
+    if (s.step === 'settings') {
+      // On phones and tablets the AI settings button lives in the case-list drawer.
+      const settingsShown = () => page.evaluate(() => [...document.querySelectorAll('button[aria-label="AI settings"]')].some((b) => !!b.offsetParent && b.getBoundingClientRect().width > 0));
+      if (!(await settingsShown())) {
+        await page.click('button[aria-label="Open case list"]');
+        await sleep(600);
+      }
+      await page.evaluate(() => [...document.querySelectorAll('button[aria-label="AI settings"]')].find((b) => !!b.offsetParent && b.getBoundingClientRect().width > 0)?.click());
+    }
+    if (s.step === 'menu') {
+      // Radix opens the menu on keyboard Enter (a synthetic click is not enough).
+      await page.focus('button[aria-label="More actions"]');
+      await page.keyboard.press('Enter');
+    }
     if (s.step === 'drawer') await page.click('button[aria-label="Open case list"]');
     if (s.step === 'end') await page.evaluate(() => document.querySelector('#impression')?.closest('.overflow-y-auto')?.scrollTo(0, 1e6));
     if (s.step) await sleep(600);
@@ -296,8 +378,12 @@ async function run() {
     before.footer = await readFooter();
     const switched = s.switchEngine ? await switchEngineAndRead(s.switchEngine) : null;
 
-    const m = await page.evaluate(() => {      const visible = (el) => !!el.offsetParent && el.getBoundingClientRect().width > 0;
+    const m = await page.evaluate(() => {
+      const visible = (el) => !!el.offsetParent && el.getBoundingClientRect().width > 0;
       const controls = [...document.querySelectorAll('header button, header a, [role="group"] button, nav button')].filter(visible);
+      // The patient name is the wrong-patient safeguard: on desktop it must keep a readable width beside the actions.
+      const title = window.innerWidth >= 1024 ? document.querySelector('header h1') : null;
+      const crushedTitle = title && title.scrollWidth > title.clientWidth + 1 && title.getBoundingClientRect().width < 160 ? Math.round(title.getBoundingClientRect().width) : 0;
       const clipped = controls.filter((el) => el.scrollWidth > el.clientWidth + 1 || el.getBoundingClientRect().height > 46).map((el) => el.getAttribute('aria-label') || el.textContent.trim().slice(0, 30));
       const unnamed = [...document.querySelectorAll('button, a[href]')].filter((el) => visible(el) && !el.textContent.trim() && !el.getAttribute('aria-label')).map((el) => el.outerHTML.slice(0, 80));
       const text = document.body.innerText;
@@ -310,7 +396,72 @@ async function run() {
       const modelNote = [...document.querySelectorAll('[role="dialog"] p')].map((p) => p.innerText).find((t) => /models reported/.test(t)) ?? '';
       // The footer line sits in a paragraph next to the Model select (it can read 0 on first paint, so read it when the list is there).
       const modelFooter = [...document.querySelectorAll('[role="dialog"] p')].map((p) => p.innerText.trim()).find((t) => /models reported/.test(t)) ?? '';
+      const outside = (inner, outer) => inner.left < outer.left - 0.5 || inner.right > outer.right + 0.5 || inner.top < outer.top - 0.5 || inner.bottom > outer.bottom + 0.5;
+      const name = (el) => (el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.value || el.textContent || el.tagName).trim().slice(0, 30);
+      // (a) Sheet fields whose printed text is cut off (single-line inputs that cannot wrap, text areas that scroll).
+      const fields = [...document.querySelectorAll('article input:not([type=checkbox]):not([type=radio]):not([type=hidden]), article textarea')].filter(visible);
+      const clippedFields = fields.filter((el) => el.scrollWidth > el.clientWidth + 1 || (el.tagName === 'TEXTAREA' && el.scrollHeight > el.clientHeight + 1)).map(name);
+      // (b) Menu items without their base layout (a row of icon + label, icons at most 20px).
+      const menuItems = [...document.querySelectorAll('[role="menuitem"]')].filter(visible);
+      const brokenItems = menuItems
+        .filter((el) => getComputedStyle(el).display !== 'flex' || [...el.querySelectorAll('svg')].some((svg) => svg.getBoundingClientRect().width > 20 || svg.getBoundingClientRect().height > 20))
+        .map(name);
+      // (c) Dialogs and their footer buttons must sit inside the dialog and the viewport.
+      const view = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+      const dialogFaults = [...document.querySelectorAll('[role="dialog"], [role="alertdialog"]')].filter(visible).flatMap((dlg) => {
+        const box = dlg.getBoundingClientRect();
+        const title = dlg.querySelector('h2')?.textContent.trim().slice(0, 30) || 'dialog';
+        const faults = box.left < -0.5 || box.right > view.right + 0.5 ? [`${title} wider than the screen`] : [];
+        for (const b of [...dlg.querySelectorAll('footer button, footer a')].filter(visible)) {
+          const r = b.getBoundingClientRect();
+          if (outside(r, box) || outside(r, view) || b.scrollWidth > b.clientWidth + 1) faults.push(`${title}: "${name(b)}"`);
+        }
+        return faults;
+      });
+      // (d) Section-nav items that are out of sight while the nav cannot scroll to them.
+      const nav = document.querySelector('nav[aria-label="Report sections"]');
+      const navBox = nav && visible(nav) ? nav.getBoundingClientRect() : null;
+      const navCanScroll = !!nav && nav.scrollWidth > nav.clientWidth + 1 && getComputedStyle(nav).overflowX !== 'hidden' && getComputedStyle(nav).overflowX !== 'clip';
+      const unreachable = navBox && !navCanScroll
+        ? [...nav.querySelectorAll('button')].filter((b) => {
+            const r = b.getBoundingClientRect();
+            return r.right <= navBox.left + 1 || r.left >= navBox.right - 1 || r.left >= view.right - 1;
+          }).map(name)
+        : [];
+      // (e) The phone bottom action bar: every button whole, inside the bar and the screen.
+      const approveBtn = [...document.querySelectorAll('button')].find((b) => visible(b) && /Approve & download|Download PDF/.test(b.textContent) && b.getBoundingClientRect().bottom > window.innerHeight - 96);
+      const bar = window.innerWidth < 640 && approveBtn ? approveBtn.parentElement : null;
+      const barFaults = bar
+        ? [...bar.querySelectorAll('button')].filter(visible).filter((b) => {
+            const r = b.getBoundingClientRect();
+            // sr-only labels (1px boxes) are meant to overflow; only visible text counts.
+            return outside(r, bar.getBoundingClientRect()) || outside(r, view) || [b, ...b.querySelectorAll('span:not([aria-hidden])')].some((el) => el.getBoundingClientRect().width > 1 && el.scrollWidth > el.clientWidth + 1);
+          }).map(name)
+        : [];
+      // (f) The One Shimmer Rule: at most one shimmer ring on screen, never on a disabled or busy control,
+      // Download PDF, a dialog or the sheet. Hidden panes (display:none, visibility:hidden) do not count.
+      const shown = (el) => visible(el) && (el.checkVisibility?.({ visibilityProperty: true, checkVisibilityCSS: true }) ?? true);
+      const rings = [...document.querySelectorAll('.shimmer-ring')].filter(shown);
+      const ringFaults = rings.flatMap((ring) => {
+        const b = ring.closest('button');
+        const label = b ? name(b) : 'outside a button';
+        return [
+          (!b || b.disabled || b.getAttribute('aria-disabled') === 'true' || b.getAttribute('aria-busy') === 'true') && `on a disabled or busy control (${label})`,
+          b && /Download PDF/.test(b.textContent) && 'on Download PDF',
+          ring.closest('[role="dialog"], [role="alertdialog"], article') && `inside a dialog or the sheet (${label})`,
+        ].filter(Boolean);
+      });
       return {
+        rings: rings.length,
+        ringNames: rings.map((ring) => (ring.closest('button') ? name(ring.closest('button')) : '?')),
+        ringFaults,
+        overflowX: document.documentElement.scrollWidth - window.innerWidth,
+        clippedFields,
+        menuItems: menuItems.length,
+        brokenItems,
+        dialogFaults,
+        unreachable,
+        barFaults,
         text,
         named,
         modelOptions,
@@ -318,12 +469,14 @@ async function run() {
         modelNote,
         modelFooter,
         clipped,
+        crushedTitle,
         unnamed,
-        alerts: document.querySelectorAll('[role="alert"]').length,
+        alerts: document.querySelectorAll('[role="region"][aria-label="Wording check"]').length,
         ringed: document.querySelectorAll('[data-flag-key].ring-warning').length,
         chip: text.includes('Check wording'),
         confirmedNote: text.includes('You confirmed'),
         approveBox: !!document.querySelector('[role="dialog"]')?.innerText.includes('I checked these with the senior'),
+        dialogs: [...document.querySelectorAll('[role="dialog"], [role="alertdialog"]')].filter(visible).length,
       };
     });
 
@@ -331,9 +484,22 @@ async function run() {
     const problems = [
       m.overflowX > 0 && `horizontal overflow ${m.overflowX}px`,
       m.clipped.length && `clipped controls: ${m.clipped.join(', ')}`,
+      m.crushedTitle && `patient name crushed to ${m.crushedTitle}px by the header actions`,
       m.unnamed.length && `unnamed controls: ${m.unnamed.join(' | ')}`,
+      m.clippedFields.length && `clipped sheet fields: ${m.clippedFields.join(', ')}`,
+      s.step === 'menu' && m.menuItems === 0 && 'the More menu did not open',
+      m.brokenItems.length && `menu items without their base layout: ${m.brokenItems.join(', ')}`,
+      (s.step === 'settings' || s.step === 'approve') && m.dialogs === 0 && 'the dialog did not open',
+      m.dialogFaults.length && `dialog outside the screen or clipped footer buttons: ${m.dialogFaults.join(', ')}`,
+      m.unreachable.length && `section-nav items out of reach: ${m.unreachable.join(', ')}`,
+      m.barFaults.length && `phone action bar overflows: ${m.barFaults.join(', ')}`,
+      m.rings > 1 && `${m.rings} shimmer rings at once (${m.ringNames.join(', ')}); the One Shimmer Rule allows one`,
+      m.ringFaults.length && `shimmer ring ${m.ringFaults.join('; ')}`,
+      moving.length && `still moving 1s after load under reduced motion: ${moving.slice(0, 5).join(' | ')}`,
+      s.typed && !m.text.includes(CASES.typed.sourceText.split('\n')[0]) && 'the typed findings are not shown',
       errors.length && `errors: ${errors.join(' | ').slice(0, 300)}`,
-      m.alerts !== (s.flagged ? 1 : 0) && `wording banner: expected ${s.flagged ? 1 : 0} alert(s), found ${m.alerts}`,
+      // Flagged and confirmed drafts both keep the banner (warning vs neutral); clean drafts have none.
+      m.alerts !== (s.flagged || s.confirmed ? 1 : 0) && `wording banner: expected ${s.flagged || s.confirmed ? 1 : 0} region(s), found ${m.alerts}`,
       s.flagged && s.step !== 'audit' && s.step !== 'approve' && m.ringed === 0 && 'no flagged line is ringed in the report',
       m.chip !== !!s.flagged && (s.flagged ? 'no "Check wording" chip' : 'a "Check wording" chip on a draft that has no flags'),
       s.confirmed && !m.confirmedNote && 'confirmed wording is not acknowledged on screen',

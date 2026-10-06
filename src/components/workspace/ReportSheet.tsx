@@ -1,31 +1,50 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { toast } from 'sonner';
 import { ListPlus, Plus, Siren, Trash2, X } from 'lucide-react';
 import { parseFindings, type FindingItem, type FindingSection, type ReportItem, type ReportPatch } from '../../lib/report';
 import { documentRef, defaultProfile, profileFromSnapshot, type InstitutionProfile } from '../../lib/institution';
+import { tween } from '../../lib/motion';
 import { cn } from '../../lib/cn';
 import { AutoTextarea } from '../ui/auto-textarea';
 import { IconButton, Tooltip } from '../ui/overlay';
 import { Skeleton } from '../ui/status';
-import { longDate, toLines } from './format';
+import { toLines } from './format';
 
 /* Document fields read as printed text until hovered or focused. */
 const field =
   'w-full min-w-0 rounded-[3px] bg-transparent outline-none transition-[background-color,box-shadow] duration-fast ease-standard placeholder:text-muted/80 placeholder:font-normal placeholder:not-italic';
 const editable = 'hover:bg-accent-soft/55 focus:bg-sheet focus:shadow-[0_0_0_2px_rgb(var(--accent)/0.5)]';
+// Read-only fields keep the printed look (no hover, no fill) but still show keyboard focus.
+const readOnlyFocus = 'cursor-text focus-visible:shadow-[0_0_0_2px_rgb(var(--accent)/0.35)]';
 
-const fieldClass = (readOnly: boolean, extra?: string) => cn(field, !readOnly && editable, readOnly && 'cursor-text', extra);
+const fieldClass = (readOnly: boolean, extra?: string) => cn(field, readOnly ? readOnlyFocus : editable, extra);
 
-/** Wrapping single-line values (names, structures): Enter never inserts a line break. */
+/**
+ * Every flaggable line ([data-flag-key]) carries an invisible amber ring just outside it. ReportPane's flag jump
+ * breathes it once (WAAPI on ::after, opacity only), so the landing reads without touching the printed text.
+ */
+const flagHalo =
+  'relative after:pointer-events-none after:absolute after:-inset-1 after:rounded-lg after:opacity-0 after:shadow-[0_0_0_3px_rgb(var(--warning)/0.4)]';
+
+/** The develop reveal's stagger: six slots (patient, technique, critical box, findings, impression, sign-off) settle by 860ms. */
+const REVEAL_STEP = 60;
+
+/** Wrapping single-line values (names, structures, printed one-paragraph fields): Enter never inserts a line break. */
 const singleLine = (e: KeyboardEvent<HTMLTextAreaElement>) => {
   if (e.key === 'Enter') e.preventDefault();
 };
+
+/** A 44px hit area on touch and pen without changing the printed geometry. */
+const coarseHit = 'relative coarse:after:absolute coarse:after:-inset-x-2.5 coarse:after:-inset-y-2.5';
 
 export const SECTION_IDS = ['patient', 'technique', 'findings', 'impression'] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
 
 const NO_FLAGS: ReadonlySet<string> = new Set();
+
+/** The printed Recommendations line when the list is empty (src/pages/print/[id].astro). */
+const RECOMMENDATIONS_FALLBACK = 'Clinical correlation is advised.';
 
 interface ReportSheetProps {
   report: ReportItem;
@@ -33,25 +52,44 @@ interface ReportSheetProps {
   onPatch: (patch: ReportPatch) => void;
   /** Letterhead / sign-off edits: applied to this case and saved as the profile future cases print with. */
   onProfile?: (patch: Partial<InstitutionProfile>) => void;
+  /** The stored Settings profile: what the PDF prints for a case with no snapshot of its own. */
+  fallbackProfile?: InstitutionProfile;
   /** Keys of lines containing wording the senior never wrote (lib/wording.ts), ringed in amber until the resident confirms. */
   flaggedKeys?: ReadonlySet<string>;
   /** Play the "developing" reveal (fresh AI draft just landed). */
   developing?: boolean;
 }
 
+/** The profile the PDF prints with: the case's snapshot, else the stored profile, else the factory defaults. */
+export const sheetProfile = (json: string | null, fallback?: InstitutionProfile) => (json ? profileFromSnapshot(json) : (fallback ?? defaultProfile()));
+
 /** The live twin of the issued A4 report: the PDF's letterhead, hierarchy and impression card, editable in place. */
-export function ReportSheet({ report: r, readOnly, onPatch, onProfile, developing, flaggedKeys = NO_FLAGS }: ReportSheetProps) {
-  const profile = profileFromSnapshot(r.institutionJson);
+export function ReportSheet({ report: r, readOnly, onPatch, onProfile, fallbackProfile, developing, flaggedKeys = NO_FLAGS }: ReportSheetProps) {
+  const profile = useMemo(() => sheetProfile(r.institutionJson, fallbackProfile), [r.institutionJson, fallbackProfile]);
   const reveal = (index: number): { className?: string; style?: CSSProperties } =>
     developing
-      ? { className: 'motion-safe:animate-develop motion-reduce:animate-in motion-reduce:fade-in-0', style: { animationDelay: `${index * 90}ms` } }
+      ? {
+          className: 'motion-safe:animate-develop motion-reduce:animate-in motion-reduce:fade-in-0 motion-reduce:fill-mode-backwards',
+          style: { animationDelay: `${index * REVEAL_STEP}ms` },
+        }
       : {};
+  const onFindings = useCallback((findingsJson: string) => onPatch({ findingsJson }), [onPatch]);
+  const onImpression = useCallback((impressionMarkdown: string) => onPatch({ impressionMarkdown }), [onPatch]);
+  const onRecommendations = useCallback((recommendationsMarkdown: string) => onPatch({ recommendationsMarkdown }), [onPatch]);
+  const profileReadOnly = readOnly || !onProfile;
 
   return (
     <article className="mx-auto w-full max-w-[52rem] rounded-[6px] bg-sheet font-document text-sheet-ink shadow-sheet ring-1 ring-sheet-line/70 [container:sheet/inline-size]">
-      <Letterhead developing={developing} profile={profile} readOnly={readOnly || !onProfile} onProfile={onProfile} />
+      <Letterhead developing={developing} profile={profile} readOnly={profileReadOnly} onProfile={onProfile} />
       <div className="px-4 pb-8 wide:px-10 wide:pb-10">
-        <section id="patient" data-section className={cn('scroll-mt-16 pt-1', reveal(0).className)} style={reveal(0).style}>
+        <section
+          id="patient"
+          data-section
+          tabIndex={-1}
+          aria-label="Patient and study"
+          className={cn('scroll-mt-2 pt-1 outline-none', reveal(0).className)}
+          style={reveal(0).style}
+        >
           <MetaGrid r={r} readOnly={readOnly} onPatch={onPatch} />
         </section>
 
@@ -59,6 +97,7 @@ export function ReportSheet({ report: r, readOnly, onPatch, onProfile, developin
           <AutoTextarea
             value={r.technique}
             readOnly={readOnly}
+            onKeyDown={singleLine}
             onChange={(e) => onPatch({ technique: e.target.value })}
             placeholder="Technique as performed, e.g. contrast-enhanced CT of the abdomen and pelvis with multiplanar reformations."
             aria-label="Technique"
@@ -66,32 +105,33 @@ export function ReportSheet({ report: r, readOnly, onPatch, onProfile, developin
           />
         </SheetSection>
 
+        {/* Arrives with a fade and a 4px rise (no height tween); clearing urgent removes it at once. */}
         <AnimatePresence initial={false}>
           {r.isUrgent && (
-            <motion.div
-              key="urgent"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-              className="overflow-hidden"
-            >
-              <UrgentBox r={r} readOnly={readOnly} onPatch={onPatch} flagged={flaggedKeys.has('urgent')} />
+            <motion.div key="urgent" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={tween.enter}>
+              <UrgentBox r={r} readOnly={readOnly} onPatch={onPatch} flagged={flaggedKeys.has('urgent')} {...reveal(2)} />
             </motion.div>
           )}
         </AnimatePresence>
 
-        <SheetSection id="findings" title="Findings" tag="RadLex Organ Grouping" developing={developing} {...reveal(2)}>
-          <FindingsEditor json={r.findingsJson} readOnly={readOnly} flaggedKeys={flaggedKeys} onChange={(findingsJson) => onPatch({ findingsJson })} />
+        <SheetSection id="findings" title="Findings" tag="RadLex Organ Grouping" developing={developing} {...reveal(3)}>
+          <FindingsEditor json={r.findingsJson} readOnly={readOnly} flaggedKeys={flaggedKeys} onChange={onFindings} />
         </SheetSection>
 
         <section
           id="impression"
           data-section
-          className={cn('mt-7 scroll-mt-16 rounded-[4px] border border-sheet-line border-l-4 border-l-brand bg-sheet-tint/45 px-4 py-3.5 sm:px-5', reveal(3).className)}
-          style={reveal(3).style}
+          tabIndex={-1}
+          aria-labelledby="impression-title"
+          className={cn(
+            'mt-7 scroll-mt-2 rounded-[4px] border border-sheet-line border-l-4 border-l-brand bg-sheet-tint/45 px-4 py-3.5 outline-none wide:px-5',
+            reveal(4).className,
+          )}
+          style={reveal(4).style}
         >
-          <h2 className="text-sm font-extrabold uppercase tracking-[0.08em] text-brand-ink">Impression</h2>
+          <h2 id="impression-title" className="text-sm font-extrabold uppercase tracking-[0.08em] text-brand-ink">
+            Impression
+          </h2>
           <ListEditor
             markdown={r.impressionMarkdown}
             numbered
@@ -102,7 +142,7 @@ export function ReportSheet({ report: r, readOnly, onPatch, onProfile, developin
             placeholder="Key diagnosis or finding, with side, level and key measurement"
             addLabel="Add impression point"
             itemClass="font-semibold"
-            onChange={(impressionMarkdown) => onPatch({ impressionMarkdown })}
+            onChange={onImpression}
           />
           <div className="mt-3 border-t border-sheet-line pt-2.5">
             <h3 className="text-xs font-extrabold uppercase tracking-[0.08em] text-accent">Recommendations</h3>
@@ -114,46 +154,61 @@ export function ReportSheet({ report: r, readOnly, onPatch, onProfile, developin
               label="Recommendations"
               placeholder="The senior's advice first; otherwise “Clinical correlation is advised.”"
               addLabel="Add recommendation"
-              onChange={(recommendationsMarkdown) => onPatch({ recommendationsMarkdown })}
+              emptyText={RECOMMENDATIONS_FALLBACK}
+              onChange={onRecommendations}
             />
           </div>
         </section>
 
-        <SignOff r={r} profile={profile} readOnly={readOnly || !onProfile} onProfile={onProfile} />
+        {/* A wrapper carries the reveal, so the memoised sign-off is not re-rendered by its style object. */}
+        <div {...reveal(5)}>
+          <SignOff docRef={documentRef(r.tokenNumber, r.id)} profile={profile} readOnly={profileReadOnly} onProfile={onProfile} />
+        </div>
       </div>
     </article>
   );
 }
 
-const crestClass = 'h-9 w-9 shrink-0 rounded-full bg-white object-contain ring-1 ring-black/5 dark:ring-white/15 wide:h-12 wide:w-12';
+const crestClass = 'h-9 w-9 shrink-0 rounded-full bg-white object-contain ring-1 ring-sheet-line wide:h-12 wide:w-12';
 
-/** One editable letterhead / sign-off value: an input that reads as printed text until hovered. */
+/**
+ * One editable letterhead / sign-off value. It wraps exactly as the PDF prints it and reads as printed text until
+ * hovered. Out of the Tab order: these edits rewrite the profile of every future case, so keyboard users change it in
+ * Settings, and Tab goes straight to the patient fields.
+ */
 function ProfileInput({
   value,
   readOnly,
   label,
   onChange,
+  inline,
   className,
 }: {
   value: string;
   readOnly: boolean;
   label: string;
   onChange?: (value: string) => void;
+  /** Sits in a run of text: as wide as its value (wrapping at the line's width) instead of the full line. */
+  inline?: boolean;
   className?: string;
 }) {
   return (
-    <input
+    <AutoTextarea
       value={value}
       readOnly={readOnly}
+      tabIndex={-1}
       aria-label={label}
       placeholder={readOnly ? undefined : label}
+      onKeyDown={singleLine}
       onChange={(e) => onChange?.(e.target.value)}
-      className={fieldClass(readOnly, className)}
+      // Where field-sizing is unsupported, cols approximates the value's width.
+      cols={inline ? Math.max(6, value.length) : undefined}
+      className={fieldClass(readOnly, cn(inline && 'inline-block w-auto min-w-[6ch] max-w-full align-top', className))}
     />
   );
 }
 
-function Letterhead({
+const Letterhead = memo(function Letterhead({
   developing,
   profile,
   readOnly = true,
@@ -168,10 +223,18 @@ function Letterhead({
   const inst = profile ?? defaultProfile();
   const set = (patch: Partial<InstitutionProfile>) => onProfile?.(patch);
   return (
-    <div className="px-4 pt-5 wide:px-10 wide:pt-7" aria-label="Report letterhead">
+    <div role="group" className="px-4 pt-5 wide:px-10 wide:pt-7" aria-label="Report letterhead">
       <div className="flex items-center gap-3 wide:gap-4">
-        <img src="/assets/gmc_crest_300dpi.png" alt="" className={crestClass} />
+        <img src="/assets/gmc_crest_screen.png" alt="" width={48} height={48} decoding="async" className={crestClass} />
         <div className="min-w-0 flex-1 text-center leading-tight">
+          {/* Printed above the department; wide only, like the faculty line, at the 12px floor. */}
+          <ProfileInput
+            value={inst.government}
+            readOnly={readOnly}
+            label="Government line"
+            onChange={(government) => set({ government })}
+            className="hidden text-center text-xs font-bold uppercase tracking-[0.12em] text-muted wide:block"
+          />
           <ProfileInput
             value={inst.department}
             readOnly={readOnly}
@@ -193,29 +256,30 @@ function Letterhead({
               readOnly={readOnly}
               label="Head of Department"
               onChange={(hod) => set({ hod })}
-              className="inline-block w-[13rem] align-baseline text-xs text-sheet-ink/70"
+              inline
+              className="text-center text-xs text-sheet-ink/70"
             />{' '}
-            <span className="text-faint">•</span>{' '}
-            <strong className="font-bold">Senior Registrars:</strong>{' '}
+            <span className="text-faint">•</span> <strong className="font-bold">Senior Registrars:</strong>{' '}
             <ProfileInput
               value={inst.seniorRegistrars}
               readOnly={readOnly}
               label="Senior Registrars"
               onChange={(seniorRegistrars) => set({ seniorRegistrars })}
-              className="inline-block w-[16rem] align-baseline text-xs text-sheet-ink/70"
+              inline
+              className="text-center text-xs text-sheet-ink/70"
             />
           </p>
         </div>
-        <img src="/assets/gth_crest_300dpi.png" alt="" className={crestClass} />
+        <img src="/assets/gth_crest_screen.png" alt="" width={48} height={48} decoding="async" className={crestClass} />
       </div>
       {/* The printed two-cell stripe: navy 70 / cobalt 30; it draws itself when a fresh draft lands. */}
       <div className="mt-3 flex h-[3px] overflow-hidden rounded-full">
         <span className={cn('w-[70%] origin-left bg-brand dark:bg-[#2C4F94]', draw)} />
-        <span className={cn('flex-1 origin-left bg-accent', draw)} style={developing ? { animationDelay: '320ms' } : undefined} />
+        <span className={cn('flex-1 origin-left bg-accent', draw)} style={developing ? { animationDelay: '240ms' } : undefined} />
       </div>
     </div>
   );
-}
+});
 
 function SheetSection({
   id,
@@ -235,9 +299,17 @@ function SheetSection({
   children: ReactNode;
 }) {
   return (
-    <section id={id} data-section={id ? '' : undefined} className={cn('scroll-mt-16 pt-7', className)} style={style}>
+    <section
+      id={id}
+      data-section={id ? '' : undefined}
+      // A nav jump moves focus here, so the next Tab lands inside this section.
+      tabIndex={id ? -1 : undefined}
+      aria-labelledby={id ? `${id}-title` : undefined}
+      className={cn('scroll-mt-2 pt-7 outline-none', className)}
+      style={style}
+    >
       <h2 className="relative flex items-baseline justify-between gap-3 pb-1 text-sm font-extrabold uppercase tracking-[0.08em] text-brand-ink">
-        <span>{title}</span>
+        <span id={id ? `${id}-title` : undefined}>{title}</span>
         {tag && <span className="text-xs font-bold tracking-[0.1em] text-faint">{tag}</span>}
         <span
           aria-hidden
@@ -251,13 +323,13 @@ function SheetSection({
 }
 
 /** The printed sign-off and footer: the letterhead profile's sign-off half, shown so the twin ends where the page ends. */
-function SignOff({
-  r,
+const SignOff = memo(function SignOff({
+  docRef,
   profile,
   readOnly = true,
   onProfile,
 }: {
-  r: ReportItem;
+  docRef: string;
   profile?: InstitutionProfile;
   readOnly?: boolean;
   onProfile?: (patch: Partial<InstitutionProfile>) => void;
@@ -267,19 +339,21 @@ function SignOff({
   const setRadiologist = (index: number, patch: Partial<{ name: string; qualification: string }>) =>
     set({ reportingRadiologists: inst.reportingRadiologists.map((doc, i) => (i === index ? { ...doc, ...patch } : doc)) });
   return (
-    <footer aria-label="Printed sign-off" className="mt-8">
-      <div className="grid gap-4 border-t border-sheet-line pt-3 wide:grid-cols-2 wide:gap-0">
-        <div className="wide:border-r wide:border-sheet-line wide:pr-5">
+    <div role="group" aria-label="Printed sign-off" className="mt-8">
+      {/* Two columns only once each has room for a name and its qualification side by side. */}
+      <div className="grid gap-4 border-t border-sheet-line pt-3 roomy-sheet:grid-cols-2 roomy-sheet:gap-0">
+        <div className="roomy-sheet:border-r roomy-sheet:border-sheet-line roomy-sheet:pr-5">
           <p className="text-xs font-extrabold uppercase tracking-[0.08em] text-muted">Primary Reporting Radiologists</p>
           <ul className="mt-1.5 space-y-0.5 text-sm leading-snug">
             {inst.reportingRadiologists.map((doc, index) => (
-              <li key={index} className="flex flex-wrap items-baseline gap-x-1">
+              <li key={index} className="flex flex-wrap items-start gap-x-1">
                 <ProfileInput
                   value={doc.name}
                   readOnly={readOnly}
                   label={`Radiologist ${index + 1} name`}
                   onChange={(name) => setRadiologist(index, { name })}
-                  className="w-[11rem] font-bold text-sheet-ink"
+                  inline
+                  className="font-bold text-sheet-ink"
                 />
                 <span className="text-muted">—</span>
                 <ProfileInput
@@ -287,72 +361,75 @@ function SignOff({
                   readOnly={readOnly}
                   label={`Radiologist ${index + 1} qualification`}
                   onChange={(qualification) => setRadiologist(index, { qualification })}
-                  className="w-[14rem] text-muted"
+                  inline
+                  className="text-muted"
                 />
               </li>
             ))}
           </ul>
         </div>
-        <div className="wide:pl-5 wide:text-right">
+        <div className="roomy-sheet:pl-5 roomy-sheet:text-right">
           <p className="text-xs font-extrabold uppercase tracking-[0.08em] text-muted">Reviewed &amp; Approved By (Consultants)</p>
           <ProfileInput
             value={inst.hod}
             readOnly={readOnly}
             label="Head of Department"
             onChange={(hod) => set({ hod })}
-            className="mt-1.5 block w-full text-right text-md font-black text-brand-ink"
+            className="mt-1.5 text-md font-black text-brand-ink roomy-sheet:text-right"
           />
           <ProfileInput
             value={inst.hodQualification}
             readOnly={readOnly}
             label="Head of Department qualification"
             onChange={(hodQualification) => set({ hodQualification })}
-            className="block w-full text-right text-sm font-bold text-sheet-ink/80"
+            className="text-sm font-bold text-sheet-ink/80 roomy-sheet:text-right"
           />
-          <div className="mt-0.5 flex items-baseline justify-end gap-1 text-sm text-muted">
+          <div className="mt-0.5 flex flex-wrap items-start gap-x-1 text-sm text-muted roomy-sheet:justify-end">
             <ProfileInput
               value={inst.seniorRegistrars}
               readOnly={readOnly}
               label="Senior Registrars"
               onChange={(seniorRegistrars) => set({ seniorRegistrars })}
-              className="w-[15rem] text-right text-sm text-muted"
+              inline
+              className="text-sm text-muted roomy-sheet:text-right"
             />
             <span>(Senior Registrars)</span>
           </div>
         </div>
       </div>
-      <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-sheet-line pt-2 text-xs text-muted">
+      <div className="mt-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-1 border-t border-sheet-line pt-2 text-xs text-muted">
         <ProfileInput
           value={inst.footer}
           readOnly={readOnly}
           label="Footer line"
           onChange={(footer) => set({ footer })}
-          className="min-w-[16rem] flex-1 text-xs text-muted"
+          className="min-w-0 flex-[1_1_16rem] text-xs text-muted"
         />
-        <span className="font-mono">Document Ref: {documentRef(r.tokenNumber, r.id)}</span>
+        <span className="font-mono">Document Ref: {docRef}</span>
       </div>
-    </footer>
+    </div>
   );
-}
+});
 
 /* ---------- Patient & study grid (the PDF's meta box) ---------- */
 
 function MetaGrid({ r, readOnly, onPatch }: { r: ReportItem; readOnly: boolean; onPatch: (p: ReportPatch) => void }) {
-  const input = (key: keyof ReportPatch, value: string | null, extra?: string, placeholder?: string) => (
+  const input = (key: keyof ReportPatch, value: string | null, extra?: string, placeholder?: string, label?: string) => (
     <input
       value={value ?? ''}
       readOnly={readOnly}
       placeholder={placeholder ?? 'Not stated'}
+      aria-label={label}
       onChange={(e) => onPatch({ [key]: e.target.value } as ReportPatch)}
       className={fieldClass(readOnly, cn('-mx-1 px-1 py-0.5 text-md font-semibold text-sheet-ink', extra))}
     />
   );
-  // Long values wrap instead of being clipped.
-  const text = (key: keyof ReportPatch, value: string | null, label: string, extra?: string) => (
+  // Long values wrap instead of being clipped; the PDF prints each as one paragraph, so Enter adds no line break.
+  const text = (key: keyof ReportPatch, value: string | null, label: string, extra?: string, placeholder = 'Not stated') => (
     <AutoTextarea
       value={value ?? ''}
       readOnly={readOnly}
-      placeholder="Not stated"
+      placeholder={placeholder}
       aria-label={label}
       onKeyDown={singleLine}
       onChange={(e) => onPatch({ [key]: e.target.value } as ReportPatch)}
@@ -362,8 +439,9 @@ function MetaGrid({ r, readOnly, onPatch }: { r: ReportItem; readOnly: boolean; 
 
   return (
     <div className="mt-4">
-      <div className="grid grid-flow-row-dense grid-cols-2 gap-px overflow-hidden rounded-[4px] border border-sheet-line bg-sheet-line wide:grid-flow-row wide:grid-cols-4">
-        <Cell label="Patient name" className="col-span-2 wide:col-span-1">
+      {/* Four columns only from 42rem of sheet: below that, labels would break into ragged two-line cells. */}
+      <div className="grid grid-flow-row-dense grid-cols-2 gap-px overflow-hidden rounded-[4px] border border-sheet-line bg-sheet-line roomy-sheet:grid-flow-row roomy-sheet:grid-cols-4">
+        <Cell label="Patient name" className="col-span-2 roomy-sheet:col-span-1">
           {text('patientName', r.patientName, 'Patient name', 'uppercase')}
         </Cell>
         <Cell label="Token / Radiology ID">
@@ -374,43 +452,30 @@ function MetaGrid({ r, readOnly, onPatch }: { r: ReportItem; readOnly: boolean; 
         </Cell>
         <Cell label="Age / Gender">
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-1">
-            {input('age', r.age, 'w-auto min-w-[3ch] max-w-full [field-sizing:content]', 'Age')}
+            {input('age', r.age, 'w-auto min-w-[3ch] max-w-full [field-sizing:content]', 'Age', 'Age')}
             <span className="text-faint">/</span>
-            {input('gender', r.gender, 'w-auto min-w-[3ch] max-w-full [field-sizing:content]', 'Gender')}
+            {input('gender', r.gender, 'w-auto min-w-[3ch] max-w-full [field-sizing:content]', 'Gender', 'Gender')}
           </div>
         </Cell>
         <Cell label="Date of exam">{input('studyDate', r.studyDate, 'tabular-nums', 'YYYY-MM-DD')}</Cell>
         <Cell label="Modality & protocol" className="col-span-2">
           {text('modality', r.modality, 'Modality and protocol', 'text-brand-ink')}
         </Cell>
-        <Cell label="Reporting date">
-          <span className="px-0 py-0.5 text-md font-semibold tabular-nums text-sheet-ink/80">{longDate(r.reportingDate) || '—'}</span>
+        <Cell as="div" label="Reporting date">
+          {/* Shown exactly as the PDF prints it: the stored value, unformatted. */}
+          <span className="px-0 py-0.5 text-md font-semibold tabular-nums text-sheet-ink/80">{r.reportingDate || '—'}</span>
         </Cell>
-        <Cell label="Referring clinician" className="col-span-2 wide:col-span-1">
+        <Cell label="Referring clinician" className="col-span-2 roomy-sheet:col-span-1">
           {text('referringClinician', r.referringClinician, 'Referring clinician', 'text-base')}
         </Cell>
-        <Cell label="Clinical indication" className="col-span-2 wide:col-span-3">
-          <AutoTextarea
-            value={r.clinicalHistory ?? ''}
-            readOnly={readOnly}
-            placeholder="Not stated in source"
-            onChange={(e) => onPatch({ clinicalHistory: e.target.value })}
-            aria-label="Clinical indication"
-            className={fieldClass(readOnly, '-mx-1 px-1 py-0.5 text-base italic leading-snug text-sheet-ink/85')}
-          />
+        <Cell label="Clinical indication" className="col-span-2 roomy-sheet:col-span-3">
+          {text('clinicalHistory', r.clinicalHistory, 'Clinical indication', 'text-base font-normal italic text-sheet-ink/85', 'Not stated in source')}
         </Cell>
-        <Cell label="Comparison" className="col-span-2 wide:col-span-1 wide:text-right">
-          <AutoTextarea
-            value={r.comparison ?? ''}
-            readOnly={readOnly}
-            placeholder="Not stated in source"
-            onChange={(e) => onPatch({ comparison: e.target.value })}
-            aria-label="Comparison"
-            className={fieldClass(readOnly, '-mx-1 px-1 py-0.5 text-base leading-snug text-sheet-ink/80 wide:text-right')}
-          />
+        <Cell label="Comparison" className="col-span-2 roomy-sheet:col-span-1 roomy-sheet:text-right">
+          {text('comparison', r.comparison, 'Comparison', 'text-base font-normal text-sheet-ink/80 roomy-sheet:text-right', 'Not stated in source')}
         </Cell>
       </div>
-      <label className="mt-2 flex items-center justify-end gap-2 text-xs text-muted">
+      <label className="mt-2 flex flex-wrap items-center justify-end gap-x-2 gap-y-1 font-sans text-xs text-muted">
         <span>MR number</span>
         <span className="text-faint">(not printed)</span>
         <input
@@ -418,29 +483,54 @@ function MetaGrid({ r, readOnly, onPatch }: { r: ReportItem; readOnly: boolean; 
           readOnly={readOnly}
           placeholder="—"
           onChange={(e) => onPatch({ mrNumber: e.target.value })}
-          className={fieldClass(readOnly, 'w-40 px-1 py-0.5 text-right font-sans text-sm tabular-nums text-ink-2')}
+          className={fieldClass(readOnly, 'w-32 px-1 py-0.5 text-right font-sans text-sm tabular-nums text-ink-2 wide:w-40')}
         />
       </label>
     </div>
   );
 }
 
-function Cell({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
+function Cell({ label, as: Tag = 'label', className, children }: { label: string; as?: 'label' | 'div'; className?: string; children: ReactNode }) {
   return (
     // justify-between: when one label in a row wraps, the values still share a baseline row.
-    <label className={cn('flex min-w-0 flex-col justify-between gap-0.5 bg-sheet px-3 py-2 transition-colors duration-fast focus-within:bg-accent-soft/35', className)}>
+    <Tag className={cn('flex min-w-0 flex-col justify-between gap-0.5 bg-sheet px-3 py-2 transition-colors duration-fast focus-within:bg-accent-soft/35', className)}>
       <span className="text-xs font-semibold uppercase tracking-[0.06em] text-muted">{label}</span>
       {children}
-    </label>
+    </Tag>
   );
 }
 
 /* ---------- Critical box (the PDF's critical alert) ---------- */
 
-function UrgentBox({ r, readOnly, onPatch, flagged }: { r: ReportItem; readOnly: boolean; onPatch: (p: ReportPatch) => void; flagged?: boolean }) {
+function UrgentBox({
+  r,
+  readOnly,
+  onPatch,
+  flagged,
+  className,
+  style,
+}: {
+  r: ReportItem;
+  readOnly: boolean;
+  onPatch: (p: ReportPatch) => void;
+  flagged?: boolean;
+  className?: string;
+  style?: CSSProperties;
+}) {
   const missing = !r.urgentFindings?.trim();
   return (
-    <section id="urgent" data-flag-key="urgent" aria-label="Critical clinical notification" className={cn('mt-6 scroll-mt-16 rounded-[4px] border border-danger/25 border-l-4 border-l-danger bg-danger-soft/70 px-4 py-3', flagged && 'ring-2 ring-warning')}>
+    <section
+      id="urgent"
+      data-flag-key="urgent"
+      aria-label="Critical clinical notification"
+      className={cn(
+        'mt-7 scroll-mt-2 rounded-[4px] border border-danger/25 border-l-4 border-l-danger bg-danger-soft/70 px-4 py-3 outline-none',
+        flagHalo,
+        flagged && 'ring-2 ring-inset ring-warning',
+        className,
+      )}
+      style={style}
+    >
       <h2 className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-[0.08em] text-danger">
         <Siren className="h-3.5 w-3.5" aria-hidden />
         Critical clinical notification
@@ -448,6 +538,7 @@ function UrgentBox({ r, readOnly, onPatch, flagged }: { r: ReportItem; readOnly:
       <AutoTextarea
         value={r.urgentFindings ?? ''}
         readOnly={readOnly}
+        onKeyDown={singleLine}
         onChange={(e) => onPatch({ urgentFindings: e.target.value })}
         placeholder="The urgent findings, exactly as they should print"
         aria-label="Urgent findings"
@@ -456,6 +547,7 @@ function UrgentBox({ r, readOnly, onPatch, flagged }: { r: ReportItem; readOnly:
       <AutoTextarea
         value={r.urgentCallLog ?? ''}
         readOnly={readOnly}
+        onKeyDown={singleLine}
         onChange={(e) => onPatch({ urgentCallLog: e.target.value })}
         placeholder="Call log: who was informed, when and by whom (written by you, never by the AI)"
         aria-label="Urgent call log"
@@ -470,9 +562,28 @@ function UrgentBox({ r, readOnly, onPatch, flagged }: { r: ReportItem; readOnly:
 
 const blankItem = (): FindingItem => ({ structure: '', content: '', isAbnormal: false });
 
-function FindingsEditor({ json, readOnly, flaggedKeys, onChange }: { json: string; readOnly: boolean; flaggedKeys: ReadonlySet<string>; onChange: (json: string) => void }) {
+/** One Undo toast at a time; a new removal replaces it. */
+const UNDO_TOAST = 'findings-undo';
+
+const FindingsEditor = memo(function FindingsEditor({
+  json,
+  readOnly,
+  flaggedKeys,
+  onChange,
+}: {
+  json: string;
+  readOnly: boolean;
+  flaggedKeys: ReadonlySet<string>;
+  onChange: (json: string) => void;
+}) {
   const sections = useMemo(() => parseFindings(json), [json]);
   const root = useRef<HTMLDivElement>(null);
+  // Undo re-inserts into the list as it is when clicked, so edits made after the removal survive.
+  const latest = useRef(sections);
+  latest.current = sections;
+
+  // The sheet remounts per case, so the toast never outlives its case and Undo can only patch this one.
+  useEffect(() => () => void toast.dismiss(UNDO_TOAST), []);
 
   const emit = (next: FindingSection[]) => onChange(JSON.stringify(next));
   const focusLater = (selector: string) => requestAnimationFrame(() => root.current?.querySelector<HTMLElement>(selector)?.focus());
@@ -480,18 +591,40 @@ function FindingsEditor({ json, readOnly, flaggedKeys, onChange }: { json: strin
   const setItem = (si: number, ii: number, patch: Partial<FindingItem>) =>
     setSection(si, { items: sections[si].items.map((it, j) => (j === ii ? { ...it, ...patch } : it)) });
 
-  const addItem = (si: number) => {
-    setSection(si, { items: [...sections[si].items, blankItem()] });
-    focusLater(`[data-structure="${si}-${sections[si].items.length}"]`);
+  const addItem = (si: number, at = sections[si].items.length) => {
+    const items = sections[si].items;
+    setSection(si, { items: [...items.slice(0, at), blankItem(), ...items.slice(at)] });
+    focusLater(`[data-structure="${si}-${at}"]`);
   };
   const addSection = () => {
     emit([...sections, { title: '', items: [blankItem()] }]);
     focusLater(`[data-title="${sections.length}"]`);
   };
-  const removeWithUndo = (next: FindingSection[], message: string) => {
-    const previous = json;
-    emit(next);
-    toast(message, { action: { label: 'Undo', onClick: () => onChange(previous) } });
+  const removeSection = (si: number) => {
+    const removed = sections[si];
+    emit(sections.filter((_, i) => i !== si));
+    toast(`Removed ${removed.title.trim() || 'region'}`, {
+      id: UNDO_TOAST,
+      action: { label: 'Undo', onClick: () => emit([...latest.current.slice(0, si), removed, ...latest.current.slice(si)]) },
+    });
+  };
+  const removeItem = (si: number, ii: number) => {
+    const removed = sections[si].items[ii];
+    emit(sections.map((sec, i) => (i === si ? { ...sec, items: sec.items.filter((_, j) => j !== ii) } : sec)));
+    toast(`Removed ${removed.structure.trim() || 'finding'}`, {
+      id: UNDO_TOAST,
+      action: {
+        label: 'Undo',
+        onClick: () =>
+          emit(latest.current.map((sec, i) => (i === si ? { ...sec, items: [...sec.items.slice(0, ii), removed, ...sec.items.slice(ii)] } : sec))),
+      },
+    });
+  };
+  // The PDF prints a finding as one paragraph: Enter starts the next row instead of a line break.
+  const contentKeyDown = (si: number, ii: number) => (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    if (!e.shiftKey && !readOnly) addItem(si, ii + 1);
   };
 
   if (!sections.length) {
@@ -503,7 +636,7 @@ function FindingsEditor({ json, readOnly, flaggedKeys, onChange }: { json: strin
         <button
           type="button"
           onClick={addSection}
-          className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-line-strong/80 bg-surface px-3 text-sm font-medium text-ink-2 shadow-xs transition-colors hover:bg-surface-2 hover:text-ink"
+          className="touch-target mt-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-line-strong/80 bg-surface px-3 text-sm font-medium text-ink-2 shadow-xs transition-[background-color,color,transform] duration-fast ease-standard hover:bg-surface-2 hover:text-ink active:scale-[0.98]"
         >
           <Plus className="h-4 w-4" />
           Add a region
@@ -517,28 +650,29 @@ function FindingsEditor({ json, readOnly, flaggedKeys, onChange }: { json: strin
       {sections.map((s, si) => (
         <div key={si} className="group/section">
           <div className="flex items-center gap-2">
-            <input
+            {/* A chip that wraps instead of clipping when the region name is wider than a phone-width sheet. */}
+            <AutoTextarea
               data-title={si}
               value={s.title}
               readOnly={readOnly}
               placeholder="Region or system"
-              aria-label="Region or system"
+              aria-label={`Region or system ${si + 1}`}
+              onKeyDown={singleLine}
               onChange={(e) => setSection(si, { title: e.target.value })}
               className={fieldClass(
                 readOnly,
-                'w-auto min-w-[4ch] max-w-full !bg-sheet-tint px-2 py-0.5 text-sm font-extrabold uppercase tracking-[0.05em] text-brand-ink [field-sizing:content] hover:!bg-accent-soft focus:!bg-sheet',
+                cn(
+                  'w-auto min-w-[4ch] max-w-full !bg-sheet-tint px-2 py-0.5 text-sm font-extrabold uppercase tracking-[0.05em] text-brand-ink [field-sizing:content]',
+                  !readOnly && 'hover:!bg-accent-soft focus:!bg-sheet',
+                ),
               )}
             />
             {!readOnly && (
-              <div className="ml-auto flex items-center opacity-0 transition-opacity duration-fast group-focus-within/section:opacity-100 group-hover/section:opacity-100 [@media(pointer:coarse)]:opacity-100">
+              <div className="ml-auto flex items-center opacity-0 transition-opacity duration-fast group-focus-within/section:opacity-100 group-hover/section:opacity-100 coarse:opacity-100">
                 <IconButton label="Add a finding to this region" size="icon-sm" onClick={() => addItem(si)}>
                   <ListPlus className="h-4 w-4" />
                 </IconButton>
-                <IconButton
-                  label="Remove this region"
-                  size="icon-sm"
-                  onClick={() => removeWithUndo(sections.filter((_, i) => i !== si), `Removed ${s.title.trim() || 'region'}`)}
-                >
+                <IconButton label="Remove this region" size="icon-sm" onClick={() => removeSection(si)}>
                   <Trash2 className="h-4 w-4" />
                 </IconButton>
               </div>
@@ -546,74 +680,70 @@ function FindingsEditor({ json, readOnly, flaggedKeys, onChange }: { json: strin
           </div>
 
           <ul className="mt-1.5 space-y-0.5">
-            <AnimatePresence initial={false}>
-              {s.items.map((it, ii) => (
-                <motion.li
-                  key={ii}
-                  data-flag-key={`findings:${si}:${ii}`}
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                  className={cn(
-                    'group/item relative grid grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-x-1 rounded-md py-0.5 pr-8 transition-colors duration-base wide:grid-cols-[1.5rem_11rem_minmax(0,1fr)]',
-                    it.isAbnormal && 'bg-warning-soft/50',
-                    flaggedKeys.has(`findings:${si}:${ii}`) && 'ring-2 ring-warning',
+            {/* Rows appear and go in place (no height tween), so index keys stay correct. */}
+            {s.items.map((it, ii) => (
+              <li
+                key={ii}
+                data-flag-key={`findings:${si}:${ii}`}
+                className={cn(
+                  'group/item grid grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-x-1 rounded-md py-0.5 transition-colors duration-base roomy-sheet:grid-cols-[1.5rem_11rem_minmax(0,1fr)]',
+                  flagHalo,
+                  !readOnly && 'pr-8',
+                  it.isAbnormal && 'bg-warning-soft/50',
+                  flaggedKeys.has(`findings:${si}:${ii}`) && 'ring-2 ring-warning',
+                )}
+              >
+                <Tooltip content={it.isAbnormal ? 'Abnormal finding · click to mark normal' : 'Normal statement · click to mark abnormal'} side="left">
+                  <button
+                    type="button"
+                    disabled={readOnly}
+                    aria-pressed={!!it.isAbnormal}
+                    aria-label={it.isAbnormal ? 'Abnormal finding (mark as normal)' : 'Normal statement (mark as abnormal)'}
+                    onClick={() => setItem(si, ii, { isAbnormal: !it.isAbnormal })}
+                    className={cn('grid h-8 w-6 place-items-center rounded disabled:cursor-default', coarseHit)}
+                  >
+                    <span
+                      className={cn(
+                        'h-2 w-2 rounded-full transition-[background-color,transform,box-shadow] duration-base ease-out',
+                        it.isAbnormal ? 'scale-125 bg-warning shadow-[0_0_0_3px_rgb(var(--warning)/0.18)]' : 'bg-accent',
+                      )}
+                    />
+                  </button>
+                </Tooltip>
+                <AutoTextarea
+                  data-structure={`${si}-${ii}`}
+                  value={it.structure}
+                  readOnly={readOnly}
+                  placeholder="Structure"
+                  aria-label={`Structure, ${s.title.trim() || 'region'} row ${ii + 1}`}
+                  onKeyDown={singleLine}
+                  onChange={(e) => setItem(si, ii, { structure: e.target.value })}
+                  className={fieldClass(readOnly, 'px-1 py-1 text-md font-semibold leading-relaxed text-sheet-ink')}
+                />
+                <AutoTextarea
+                  value={it.content}
+                  readOnly={readOnly}
+                  placeholder="Finding"
+                  aria-label={`${it.structure || 'Finding'} text`}
+                  onKeyDown={contentKeyDown(si, ii)}
+                  onChange={(e) => setItem(si, ii, { content: e.target.value })}
+                  className={fieldClass(
+                    readOnly,
+                    cn('col-start-2 px-1 py-1 text-md leading-relaxed text-sheet-ink/90 roomy-sheet:col-start-3', it.isAbnormal && 'font-medium text-sheet-ink'),
                   )}
-                >
-                  <Tooltip content={it.isAbnormal ? 'Abnormal finding · click to mark normal' : 'Normal statement · click to mark abnormal'} side="left">
-                    <button
-                      type="button"
-                      disabled={readOnly}
-                      aria-pressed={!!it.isAbnormal}
-                      aria-label={it.isAbnormal ? 'Abnormal finding (mark as normal)' : 'Normal statement (mark as abnormal)'}
-                      onClick={() => setItem(si, ii, { isAbnormal: !it.isAbnormal })}
-                      className="grid h-8 w-6 place-items-center rounded disabled:cursor-default"
-                    >
-                      <span
-                        className={cn(
-                          'h-2 w-2 rounded-full transition-[background-color,transform,box-shadow] duration-base ease-out',
-                          it.isAbnormal ? 'scale-125 bg-warning shadow-[0_0_0_3px_rgb(var(--warning)/0.18)]' : 'bg-accent',
-                        )}
-                      />
-                    </button>
-                  </Tooltip>
-                  <AutoTextarea
-                    data-structure={`${si}-${ii}`}
-                    value={it.structure}
-                    readOnly={readOnly}
-                    placeholder="Structure"
-                    aria-label="Structure"
-                    onKeyDown={singleLine}
-                    onChange={(e) => setItem(si, ii, { structure: e.target.value })}
-                    className={fieldClass(readOnly, 'px-1 py-1 text-md font-semibold leading-relaxed text-sheet-ink')}
-                  />
-                  <AutoTextarea
-                    value={it.content}
-                    readOnly={readOnly}
-                    placeholder="Finding"
-                    aria-label={`${it.structure || 'Finding'} text`}
-                    onChange={(e) => setItem(si, ii, { content: e.target.value })}
-                    className={fieldClass(readOnly, cn('col-start-2 px-1 py-1 text-md leading-relaxed text-sheet-ink/90 wide:col-start-3', it.isAbnormal && 'font-medium text-sheet-ink'))}
-                  />
-                  {!readOnly && (
-                    <button
-                      type="button"
-                      aria-label={`Remove ${it.structure || 'finding'}`}
-                      onClick={() =>
-                        removeWithUndo(
-                          sections.map((sec, i) => (i === si ? { ...sec, items: sec.items.filter((_, j) => j !== ii) } : sec)),
-                          `Removed ${it.structure.trim() || 'finding'}`,
-                        )
-                      }
-                      className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded text-muted opacity-0 transition-[opacity,background-color,color] duration-fast hover:bg-surface-3 hover:text-ink focus-visible:opacity-100 group-hover/item:opacity-100 [@media(pointer:coarse)]:opacity-100"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </motion.li>
-              ))}
-            </AnimatePresence>
+                />
+                {!readOnly && (
+                  <button
+                    type="button"
+                    aria-label={`Remove ${it.structure || 'finding'}`}
+                    onClick={() => removeItem(si, ii)}
+                    className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded text-muted opacity-0 transition-[opacity,background-color,color] duration-fast hover:bg-surface-3 hover:text-ink focus-visible:opacity-100 group-hover/item:opacity-100 coarse:opacity-100 coarse:after:absolute coarse:after:-inset-2.5"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </li>
+            ))}
           </ul>
         </div>
       ))}
@@ -622,7 +752,7 @@ function FindingsEditor({ json, readOnly, flaggedKeys, onChange }: { json: strin
         <button
           type="button"
           onClick={addSection}
-          className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-sheet-line py-2 font-sans text-sm font-medium text-muted transition-colors duration-fast hover:border-accent/50 hover:bg-accent-soft/40 hover:text-accent"
+          className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-sheet-line py-2 font-sans text-sm font-medium text-muted transition-[background-color,border-color,color,transform] duration-fast ease-standard hover:border-accent/50 hover:bg-accent-soft/40 hover:text-accent active:scale-[0.98] coarse:py-3"
         >
           <Plus className="h-4 w-4" />
           Add region
@@ -630,17 +760,18 @@ function FindingsEditor({ json, readOnly, flaggedKeys, onChange }: { json: strin
       )}
     </div>
   );
-}
+});
 
 /* ---------- Numbered / bulleted lists (impression, recommendations) ---------- */
 
-function ListEditor({
+const ListEditor = memo(function ListEditor({
   markdown,
   numbered,
   readOnly,
   label,
   placeholder,
   addLabel,
+  emptyText,
   itemClass,
   flagPrefix,
   flaggedKeys,
@@ -654,6 +785,8 @@ function ListEditor({
   label: string;
   placeholder: string;
   addLabel: string;
+  /** What the PDF prints when the list is empty; the read-only twin shows it as printed text. */
+  emptyText?: string;
   itemClass?: string;
   onChange: (markdown: string) => void;
 }) {
@@ -690,13 +823,21 @@ function ListEditor({
   };
 
   const rows = items.length ? items : readOnly ? [] : [''];
+  // The wording check (lib/wording.ts) numbers only the non-blank lines, as the saved markdown does.
+  let filled = 0;
+  const flagKeys = rows.map((text) => (text.trim() ? `${flagPrefix}:${filled++}` : undefined));
 
   return (
     <div className="mt-1.5">
-      {rows.length === 0 && <p className="py-1 text-md italic text-muted">None recorded.</p>}
+      {rows.length === 0 &&
+        (emptyText ? (
+          <p className="px-1 py-1 text-md leading-snug text-sheet-ink">{emptyText}</p>
+        ) : (
+          <p className="py-1 text-md italic text-muted">None recorded.</p>
+        ))}
       <ol aria-label={label} className="space-y-0.5">
         {rows.map((text, i) => (
-          <li key={i} data-flag-key={`${flagPrefix}:${i}`} className={cn('flex items-start gap-1.5 rounded-md', flaggedKeys.has(`${flagPrefix}:${i}`) && 'ring-2 ring-warning')}>
+          <li key={i} data-flag-key={flagKeys[i]} className={cn('flex items-start gap-1.5 rounded-md', flagHalo, flagKeys[i] && flaggedKeys.has(flagKeys[i]) && 'ring-2 ring-warning')}>
             <span className={cn('w-5 shrink-0 select-none pt-[0.3rem] text-right text-md tabular-nums', numbered ? 'font-semibold text-brand-ink' : 'text-accent')} aria-hidden>
               {numbered ? `${i + 1}.` : '–'}
             </span>
@@ -715,11 +856,15 @@ function ListEditor({
           </li>
         ))}
       </ol>
+      {!readOnly && emptyText && filled === 0 && <p className="ml-6 mt-1 font-sans text-xs text-muted">Prints “{emptyText}” if left empty.</p>}
       {!readOnly && (
         <button
           type="button"
           onClick={() => commit([...rows, ''], rows.length)}
-          className="ml-6 mt-1 inline-flex h-7 items-center gap-1 rounded-md px-1.5 font-sans text-sm font-medium text-muted transition-colors duration-fast hover:bg-accent-soft/50 hover:text-accent"
+          className={cn(
+            'ml-6 mt-1 inline-flex h-7 items-center gap-1 rounded-md px-1.5 font-sans text-sm font-medium text-muted transition-[background-color,color,transform] duration-fast ease-standard hover:bg-accent-soft/50 hover:text-accent active:scale-[0.98]',
+            coarseHit,
+          )}
         >
           <Plus className="h-3.5 w-3.5" />
           {addLabel}
@@ -727,33 +872,42 @@ function ListEditor({
       )}
     </div>
   );
-}
+});
 
 /* ---------- Waiting for the AI: the sheet's own empty structure, values still to come ---------- */
 
 const META_LABELS: [string, string, string][] = [
-  ['Patient name', 'col-span-2 wide:col-span-1', 'w-32'],
+  ['Patient name', 'col-span-2 roomy-sheet:col-span-1', 'w-32'],
   ['Token / Radiology ID', '', 'w-16'],
   ['Age / Gender', '', 'w-24'],
   ['Date of exam', '', 'w-24'],
   ['Modality & protocol', 'col-span-2', 'w-56'],
   ['Reporting date', '', 'w-20'],
-  ['Referring clinician', 'col-span-2 wide:col-span-1', 'w-28'],
-  ['Clinical indication', 'col-span-2 wide:col-span-3', 'w-72'],
-  ['Comparison', 'col-span-2 wide:col-span-1', 'w-24'],
+  ['Referring clinician', 'col-span-2 roomy-sheet:col-span-1', 'w-28'],
+  ['Clinical indication', 'col-span-2 roomy-sheet:col-span-3', 'w-72'],
+  ['Comparison', 'col-span-2 roomy-sheet:col-span-1', 'w-24'],
 ];
 
-export function SheetSkeleton() {
+/** The sheet's skeleton, with the letterhead the case will print with; `still` stops the shimmer when nothing is working. */
+export function SheetSkeleton({ profile, still }: { profile?: InstitutionProfile; still?: boolean }) {
   const line = (w: string) => <Skeleton className={cn('h-3.5', w)} />;
   return (
-    <article aria-busy aria-label="Report being drafted" className="mx-auto w-full max-w-[52rem] rounded-[6px] bg-sheet font-document shadow-sheet ring-1 ring-sheet-line/70 [container:sheet/inline-size]">
-      <Letterhead />
-      <div className="px-4 pb-10 wide:px-10 wide:pb-12">
-        <div className="mt-4 grid grid-flow-row-dense grid-cols-2 gap-px overflow-hidden rounded-[4px] border border-sheet-line bg-sheet-line wide:grid-flow-row wide:grid-cols-4">
+    <article
+      aria-busy
+      aria-label="Report being drafted"
+      className={cn(
+        'mx-auto w-full max-w-[52rem] rounded-[6px] bg-sheet font-document shadow-sheet ring-1 ring-sheet-line/70 [container:sheet/inline-size]',
+        still && '[&_.skeleton]:after:animate-none',
+      )}
+    >
+      <Letterhead profile={profile} />
+      <div className="px-4 pb-8 wide:px-10 wide:pb-10">
+        <div className="mt-5 grid grid-flow-row-dense grid-cols-2 gap-px overflow-hidden rounded-[4px] border border-sheet-line bg-sheet-line roomy-sheet:grid-flow-row roomy-sheet:grid-cols-4">
           {META_LABELS.map(([label, span, width]) => (
-            <div key={label} className={cn('flex min-w-0 flex-col gap-2 bg-sheet px-3 py-2.5', span)}>
+            <div key={label} className={cn('flex min-w-0 flex-col justify-between gap-0.5 bg-sheet px-3 py-2', span)}>
               <span className="text-xs font-semibold uppercase tracking-[0.06em] text-muted">{label}</span>
-              {line(`max-w-full ${width}`)}
+              {/* The height of one value line, so the sheet does not shift when the draft lands. */}
+              <div className="flex h-[1.65rem] items-center">{line(`max-w-full ${width}`)}</div>
             </div>
           ))}
         </div>
@@ -772,9 +926,9 @@ export function SheetSkeleton() {
                 <Skeleton className="h-5 w-36 rounded-[3px]" />
                 <ul className="mt-2.5 space-y-2.5">
                   {Array.from({ length: rows }, (_, i) => (
-                    <li key={i} className="grid grid-cols-[1.5rem_minmax(0,1fr)] items-center gap-x-1 wide:grid-cols-[1.5rem_11rem_minmax(0,1fr)]">
+                    <li key={i} className="grid grid-cols-[1.5rem_minmax(0,1fr)] items-center gap-x-1 roomy-sheet:grid-cols-[1.5rem_11rem_minmax(0,1fr)]">
                       <span className="mx-auto h-2 w-2 rounded-full bg-accent/30" />
-                      <Skeleton className="hidden h-3.5 w-24 wide:block" />
+                      <Skeleton className="hidden h-3.5 w-24 roomy-sheet:block" />
                       <Skeleton className={cn('h-3.5', i % 2 ? 'w-4/5' : 'w-full')} />
                     </li>
                   ))}

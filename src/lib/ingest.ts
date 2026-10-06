@@ -37,7 +37,7 @@ export async function saveUpload(file: File) {
 }
 
 /** Inserts the blank, auto-queued case for a new note photo. Nothing is guessed: unknown fields stay empty. */
-export async function createPendingDraft(imagePath: string) {
+export async function createPendingDraft(imagePath: string, typed: Partial<NewReport> = {}) {
   const now = new Date();
   // The letterhead / sign-off profile is copied onto the case now, so editing the profile later
   // never rewrites a report that was created (or issued) with the old one.
@@ -64,6 +64,7 @@ export async function createPendingDraft(imagePath: string) {
       status: 'QUEUED',
       isArchived: false,
       institutionJson: JSON.stringify(institution),
+      ...typed,
       createdAt: now,
       updatedAt: now,
     })

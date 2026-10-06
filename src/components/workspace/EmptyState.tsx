@@ -1,48 +1,83 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useId, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Camera, FolderSync, List, MousePointerClick, Upload } from 'lucide-react';
+import { Camera, FilePlus2, FolderSync, ImagePlus, List, LoaderCircle, MousePointerClick, Upload } from 'lucide-react';
 import { cn } from '../../lib/cn';
-import { Button } from '../ui/button';
+import { spring, tween } from '../../lib/motion';
+import { Button, Kbd, PRIMARY_FILL } from '../ui/button';
 
 const imagesFrom = (list: FileList | null | undefined) => Array.from(list ?? []).filter((f) => f.type.startsWith('image/'));
 
-/** First run: what the product does, in its own pictures, and the two ways to start. */
-export function EmptyState({ onFiles, onSyncInput, aiLabel }: { onFiles: (files: File[]) => Promise<void>; onSyncInput: () => Promise<void>; aiLabel: string }) {
+const PHOTO_LABEL = cn(
+  'inline-flex h-11 shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-lg px-5 text-md font-medium',
+  'press lift',
+  'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-canvas',
+);
+const SECONDARY_LABEL = 'border border-line-strong/80 bg-surface text-ink-2 shadow-xs hover:border-line-strong hover:bg-surface-2 hover:text-ink';
+/** The cobalt halo behind the illustration, on the brand glow. */
+const HALO =
+  'relative isolate mx-auto before:pointer-events-none before:absolute before:-inset-x-[15%] before:-inset-y-[25%] before:-z-10 before:bg-[radial-gradient(closest-side,rgb(var(--accent)/0.16),transparent)]';
+/** The page-load cascade (.intro in global.css): n-th block, 50ms apart. */
+const intro = (i: number) => ({ 'data-intro': '', style: { '--i': i } as CSSProperties });
+
+/** First run: what the product does, in its own pictures, and the three ways to start. */
+export function EmptyState({ onFiles, onSyncInput, onCreate, aiLabel }: { onFiles: (files: File[]) => Promise<void>; onSyncInput: () => Promise<void>; onCreate: () => void; aiLabel: string }) {
   const [syncing, setSyncing] = useState(false);
-  const pick = (e: ChangeEvent<HTMLInputElement>) => {
-    void onFiles(imagesFrom(e.target.files));
+  const [adding, setAdding] = useState(false);
+  const pick = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = imagesFrom(e.target.files);
     e.target.value = '';
+    if (!files.length) return;
+    setAdding(true);
+    try {
+      await onFiles(files);
+    } finally {
+      setAdding(false);
+    }
   };
+  const photoIcon = (icon: ReactNode) => (adding ? <LoaderCircle className="h-4 w-4 motion-safe:animate-spin" /> : icon);
 
   return (
-    <div className="grid h-full place-items-center overflow-y-auto bg-canvas px-6 py-10">
-      <div className="w-full max-w-xl text-center">
-        <NoteToReport className="mx-auto mb-8 w-full max-w-[22rem]" />
-        <h2 className="text-2xl font-semibold tracking-[-0.02em] text-ink sm:text-3xl">Start with a photo of the senior’s note</h2>
-        <p className="mx-auto mt-3 max-w-[34rem] text-md leading-relaxed text-muted">
-          {aiLabel} reads the handwritten positives and drafts a complete report under AGENTS.md. You check it beside the note, then issue the PDF.
+    // Flex column + m-auto: centred when it fits, scrollable from the top when it does not (a centred grid clips the top).
+    <div className="flex h-full flex-col overflow-y-auto px-6 py-10">
+      <div className="m-auto w-full max-w-xl text-center">
+        <div {...intro(1)} className={cn(HALO, 'mb-8 w-full max-w-[22rem] short:mb-5 short:max-w-[15rem]')}>
+          <NoteToReport className="w-full" />
+        </div>
+        <h2 {...intro(2)} className="text-2xl font-semibold tracking-[-0.02em] text-ink sm:text-3xl">Start a report</h2>
+        <p {...intro(2)} className="mx-auto mt-3 max-w-[34rem] text-md leading-relaxed text-muted">
+          Photograph the senior’s note, type or dictate the positive findings, or sync the input folder. {aiLabel} drafts a complete report under AGENTS.md; you check it beside the source, then issue the PDF.
         </p>
 
-        <ol className="mx-auto mt-7 flex max-w-lg flex-col gap-3 text-left text-base text-ink-2 sm:flex-row sm:gap-6">
-          {['Photograph or drop the note', 'The AI drafts the report', 'Verify and issue the PDF'].map((step, i) => (
+        <ol {...intro(3)} className="mx-auto mt-7 flex max-w-[34rem] flex-col gap-3 text-left text-base text-ink-2 sm:flex-row sm:gap-6">
+          {['Photograph, type or sync the note', 'The AI drafts the report', 'Verify and issue the PDF'].map((step, i) => (
             <li key={step} className="flex flex-1 items-start gap-2.5">
-              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-xs font-bold text-on-accent">{i + 1}</span>
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-gradient-to-b from-brand to-brand-lo text-xs font-bold text-on-accent shadow-primary">{i + 1}</span>
               <span className="pt-0.5 leading-snug">{step}</span>
             </li>
           ))}
         </ol>
 
-        <div className="mt-8 flex flex-col items-stretch justify-center gap-2.5 sm:flex-row sm:items-center">
-          <label className="touch-target inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg bg-brand px-5 text-md font-medium text-on-accent shadow-sm transition-[background-color,transform] duration-fast hover:bg-brand/90 focus-within:ring-2 focus-within:ring-accent/40 active:scale-[0.98] [@media(pointer:coarse)]:hidden">
-            <input type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" onChange={pick} />
-            <Upload className="h-4 w-4" />
-            Choose note photos
+        <div {...intro(4)} className="mt-8 flex flex-col items-stretch justify-center gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
+          {/* Mouse: one primary file picker. Touch: the camera is the primary, and the photo library stays one tap away. */}
+          <label className={cn(PHOTO_LABEL, PRIMARY_FILL, 'coarse:hidden', adding && 'pointer-events-none opacity-60')}>
+            <input type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" onChange={pick} disabled={adding} />
+            {photoIcon(<Upload className="h-4 w-4" />)}
+            {adding ? 'Adding…' : 'Choose note photos'}
           </label>
-          <label className="hidden h-11 cursor-pointer items-center justify-center gap-2 rounded-lg bg-brand px-5 text-md font-medium text-on-accent shadow-sm active:scale-[0.98] [@media(pointer:coarse)]:inline-flex">
-            <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={pick} />
-            <Camera className="h-4 w-4" />
-            Take photo of note
+          <label className={cn(PHOTO_LABEL, PRIMARY_FILL, 'hidden coarse:inline-flex', adding && 'pointer-events-none opacity-60')}>
+            <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={pick} disabled={adding} />
+            {photoIcon(<Camera className="h-4 w-4" />)}
+            {adding ? 'Adding…' : 'Take photo of note'}
           </label>
+          <label className={cn(PHOTO_LABEL, SECONDARY_LABEL, 'hidden coarse:inline-flex', adding && 'pointer-events-none opacity-60')}>
+            <input type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" onChange={pick} disabled={adding} />
+            <ImagePlus className="h-4 w-4" />
+            Choose from photos
+          </label>
+          <Button size="lg" onClick={onCreate}>
+            <FilePlus2 className="h-4 w-4" />
+            Create Report
+          </Button>
           <Button
             size="lg"
             loading={syncing}
@@ -59,7 +94,7 @@ export function EmptyState({ onFiles, onSyncInput, aiLabel }: { onFiles: (files:
             Sync input folder
           </Button>
         </div>
-        <p className="mt-4 hidden items-center justify-center gap-1.5 text-sm text-muted sm:flex">
+        <p {...intro(4)} className="mt-4 hidden items-center justify-center gap-1.5 text-sm text-muted sm:flex coarse:!hidden">
           <MousePointerClick className="h-4 w-4" />
           Or drop photos anywhere on this window.
         </p>
@@ -70,15 +105,18 @@ export function EmptyState({ onFiles, onSyncInput, aiLabel }: { onFiles: (files:
 
 export function NoSelection({ onOpenList }: { onOpenList?: () => void }) {
   return (
-    <div className="grid h-full place-items-center bg-canvas px-6 text-center">
-      <div>
-        <NoteToReport className="mx-auto mb-6 w-56 opacity-80" />
+    <div className="flex h-full flex-col overflow-y-auto px-6 py-10 text-center">
+      <div {...intro(1)} className="m-auto">
+        <div className={cn(HALO, 'mb-6 w-56 short:mb-4 short:w-44')}>
+          <NoteToReport className="w-full opacity-80" />
+        </div>
         <p className="text-lg font-semibold text-ink">Select a case</p>
         <p className="mt-1 text-base text-muted">Pick a note from the list to review its report.</p>
         {onOpenList && (
           <Button className="mt-4" onClick={onOpenList}>
             <List className="h-4 w-4" />
-            Open case list
+            Show case list
+            <Kbd className="ml-0.5 hidden lg:inline-flex coarse:!hidden">[</Kbd>
           </Button>
         )}
       </div>
@@ -88,10 +126,18 @@ export function NoSelection({ onOpenList }: { onOpenList?: () => void }) {
 
 /** Authored illustration: a handwritten note becoming the structured, letter-headed report. */
 function NoteToReport({ className }: { className?: string }) {
+  const id = useId().replace(/[^\w-]/g, '');
+  const shadow = `url(#${id}s)`;
   return (
     <svg viewBox="0 0 300 140" className={className} role="img" aria-label="A handwritten note turning into a structured report">
-      <g transform="rotate(-6 60 74)">
-        <rect x="16" y="22" width="88" height="104" rx="6" className="fill-[#FBFAF7] stroke-line-strong" strokeWidth="1.2" />
+      <defs>
+        {/* Both papers cast a soft shadow in the theme's shadow colour. */}
+        <filter id={`${id}s`} x="-20%" y="-20%" width="140%" height="150%">
+          <feDropShadow dx="0" dy="4" stdDeviation="5" style={{ floodColor: 'rgb(var(--shadow))', floodOpacity: 'var(--shadow-a3)' }} />
+        </filter>
+      </defs>
+      <g transform="rotate(-6 60 74)" filter={shadow}>
+        <rect x="16" y="22" width="88" height="104" rx="6" className="fill-note-paper stroke-line-strong" strokeWidth="1.2" />
         {[40, 54, 68, 82, 96, 110].map((y, i) => (
           <path
             key={y}
@@ -111,7 +157,7 @@ function NoteToReport({ className }: { className?: string }) {
         <path d="M144 58 l1.6 4 4 1.6 -4 1.6 -1.6 4 -1.6 -4 -4 -1.6 4 -1.6 z" className="fill-current" />
       </g>
 
-      <rect x="190" y="10" width="96" height="122" rx="5" className="fill-surface stroke-line-strong" strokeWidth="1.2" />
+      <rect x="190" y="10" width="96" height="122" rx="5" className="fill-sheet stroke-sheet-line" strokeWidth="1.2" filter={shadow} />
       <circle cx="202" cy="23" r="4.5" className="fill-line-strong" />
       <circle cx="274" cy="23" r="4.5" className="fill-line-strong" />
       <rect x="214" y="19" width="48" height="4" rx="2" className="fill-brand" />
@@ -135,24 +181,25 @@ function NoteToReport({ className }: { className?: string }) {
   );
 }
 
-/** Drag a photo anywhere over the window to start a case. */
-export function DropOverlay({ onFiles }: { onFiles: (files: File[]) => Promise<void> }) {
+/** Drag a photo anywhere over the window to start a case. Disabled while a dialog is open, so a drop never lands behind it. */
+export function DropOverlay({ onFiles, disabled }: { onFiles: (files: File[]) => Promise<void>; disabled?: boolean }) {
   const [active, setActive] = useState(false);
   const depth = useRef(0);
 
   useEffect(() => {
     const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
     const enter = (e: DragEvent) => {
-      if (!hasFiles(e)) return;
+      if (!hasFiles(e) || disabled) return;
       e.preventDefault();
       depth.current += 1;
       setActive(true);
     };
+    // Always claim file drags, even when disabled: an unclaimed drop makes the browser navigate away to the file.
     const over = (e: DragEvent) => {
       if (hasFiles(e)) e.preventDefault();
     };
     const leave = (e: DragEvent) => {
-      if (!hasFiles(e)) return;
+      if (!hasFiles(e) || disabled) return;
       depth.current = Math.max(0, depth.current - 1);
       if (depth.current === 0) setActive(false);
     };
@@ -160,9 +207,10 @@ export function DropOverlay({ onFiles }: { onFiles: (files: File[]) => Promise<v
       if (!hasFiles(e)) return;
       depth.current = 0;
       setActive(false);
-      // The sidebar drop zone already took this drop (it calls preventDefault in React, before this window listener).
+      // Something on the page (an editor, say) already handled this drop.
       if (e.defaultPrevented) return;
       e.preventDefault();
+      if (disabled) return;
       const files = imagesFrom(e.dataTransfer?.files);
       if (files.length) void onFiles(files);
     };
@@ -175,24 +223,27 @@ export function DropOverlay({ onFiles }: { onFiles: (files: File[]) => Promise<v
       window.removeEventListener('dragover', over);
       window.removeEventListener('dragleave', leave);
       window.removeEventListener('drop', drop);
+      depth.current = 0;
+      setActive(false);
     };
-  }, [onFiles]);
+  }, [onFiles, disabled]);
 
   return (
     <AnimatePresence>
       {active && (
         <motion.div
           initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
+          animate={{ opacity: 1, transition: tween.enter }}
+          exit={{ opacity: 0, transition: tween.exit }}
           className="pointer-events-none fixed inset-0 z-[70] grid place-items-center bg-canvas/85 p-6"
         >
+          {/* The card springs up with a slight overshoot and shrinks away in 150ms; no blur over the whole window. */}
           <motion.div
-            initial={{ scale: 0.96, y: 6 }}
-            animate={{ scale: 1, y: 0 }}
-            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-            className={cn('flex w-full max-w-md flex-col items-center rounded-2xl border-2 border-dashed border-accent/60 bg-surface px-8 py-12 text-center shadow-lg')}
+            initial={{ opacity: 0, scale: 0.94, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.98, transition: tween.exit }}
+            transition={spring.pop}
+            className="glass-panel flex w-full max-w-md flex-col items-center rounded-xl border border-dashed border-accent/60 px-8 py-12 text-center shadow-lg"
           >
             <span className="mb-4 grid h-14 w-14 place-items-center rounded-full bg-accent-soft text-accent">
               <Upload className="h-6 w-6 motion-safe:animate-float" />

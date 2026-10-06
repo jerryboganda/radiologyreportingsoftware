@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { cn } from '../../lib/cn';
 import type { WordingFlag, WordingKind } from '../../lib/wording';
 
@@ -13,14 +14,16 @@ const KIND_LABEL: Record<WordingKind, string> = {
 
 /** The flagged terms, each with where it sits and the sentence around it. Used by the banner, the audit panel and the approve dialog. */
 export function WordingList({ flags, limit = 8, onSelect, className }: { flags: WordingFlag[]; limit?: number; onSelect?: (flag: WordingFlag) => void; className?: string }) {
-  const shown = flags.slice(0, limit);
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? flags : flags.slice(0, limit);
   return (
     <ul className={cn('space-y-1', className)}>
       {shown.map((f) => {
         const row = (
           <>
             <span className="shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 text-sm font-semibold text-warning">{f.term}</span>
-            <span className="shrink-0 text-sm text-muted">
+            {/* Free-text structure names can be long: this part wraps rather than pushing the row wider. */}
+            <span className="min-w-0 break-words text-sm text-muted">
               {f.where} · {KIND_LABEL[f.kind]}
             </span>
             <span className="line-clamp-2 basis-full font-document text-sm leading-snug text-ink-2">
@@ -42,7 +45,18 @@ export function WordingList({ flags, limit = 8, onSelect, className }: { flags: 
           </li>
         );
       })}
-      {flags.length > limit && <li className="px-1.5 text-sm text-muted">+ {flags.length - limit} more</li>}
+      {flags.length > limit && (
+        <li>
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((v) => !v)}
+            className="touch-target rounded-md px-1.5 py-0.5 text-sm font-medium text-muted transition-colors duration-fast hover:bg-warning/10 hover:text-ink"
+          >
+            {expanded ? 'Show fewer' : `Show all ${flags.length} (${flags.length - limit} more)`}
+          </button>
+        </li>
+      )}
     </ul>
   );
 }

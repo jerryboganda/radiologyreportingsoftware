@@ -21,6 +21,9 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
 const postJson = <T,>(url: string, body: unknown) =>
   api<T>(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
+/** Every field equal (all ReportItem fields are primitives), so a poll can keep the old object. */
+const same = (a: ReportItem, b: ReportItem) => (Object.keys(b) as (keyof ReportItem)[]).every((k) => a[k] === b[k]);
+
 /** Editable fields that differ between the last server copy and the local draft. */
 function diffEditable(base: ReportItem, draft: ReportItem): ReportPatch {
   const patch: Record<string, unknown> = {};
@@ -45,6 +48,8 @@ export function useReports() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ReportItem | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  /** The stored Settings profile; the twin's fallback for legacy cases with no snapshot. */
+  const [settingsProfile, setSettingsProfile] = useState<InstitutionProfile | null>(null);
   const [engine, setEngine] = useState<{
     lastSeen: number | null;
     busy: boolean;
@@ -75,6 +80,8 @@ export function useReports() {
   const editSeq = useRef(0);
   const inFlight = useRef<Promise<void> | null>(null);
   const timer = useRef<number | undefined>(undefined);
+  const settingsRef = useRef<InstitutionProfile | null>(null);
+  settingsRef.current = settingsProfile;
 
   const setDraftBoth = (next: ReportItem | null) => {
     draftRef.current = next;
@@ -89,6 +96,8 @@ export function useReports() {
   /** Takes a fresh server copy of the selected case without discarding local edits. */
   const adopt = useCallback((server: ReportItem) => {
     if (server.id !== selectedRef.current) return;
+    // Unchanged on the server: the draft (and any pending edit in it) stays as it is.
+    if (baseRef.current && same(baseRef.current, server)) return;
     baseRef.current = server;
     const local = draftRef.current;
     if (dirtyRef.current && local && local.id === server.id) {
@@ -113,12 +122,20 @@ export function useReports() {
         api<ReportItem[]>('/api/reports'),
         api<{ workerLastSeen: number | null; workerBusy: boolean; workerEngine: string | null; workerModel: string | null; workerModels: string[]; workerModelVariants?: Record<string, string[]>; workerEngineModels?: Record<string, string[]>; workerEngineLabels?: Record<string, Record<string, string>> }>('/api/queue').catch(() => null),
       ]);
-      reportsRef.current = list;
-      setReports(list);
+      // Structural sharing: unchanged rows keep their object, and state is only set when something changed.
+      const prev = new Map(reportsRef.current.map((r) => [r.id, r]));
+      const merged = list.map((r) => {
+        const p = prev.get(r.id);
+        return p && same(p, r) ? p : r;
+      });
+      if (merged.length !== reportsRef.current.length || merged.some((r, i) => r !== reportsRef.current[i])) {
+        reportsRef.current = merged;
+        setReports(merged);
+      }
       setLoaded(true);
       setLoadError(null);
-      if (queue)
-        setEngine({
+      if (queue) {
+        const next = {
           lastSeen: queue.workerLastSeen,
           busy: queue.workerBusy,
           engine: queue.workerEngine,
@@ -127,8 +144,10 @@ export function useReports() {
           modelVariants: queue.workerModelVariants ?? {},
           modelsByEngine: queue.workerEngineModels ?? {},
           labelsByEngine: queue.workerEngineLabels ?? {},
-        });
-      const current = list.find((r) => r.id === selectedRef.current);
+        };
+        setEngine((e) => (JSON.stringify(e) === JSON.stringify(next) ? e : next));
+      }
+      const current = merged.find((r) => r.id === selectedRef.current);
       if (current) adopt(current);
     } catch (error) {
       setLoadError((error as Error).message);
@@ -164,6 +183,7 @@ export function useReports() {
           dirtyRef.current = false;
           setDraftBoth(row);
           setSaveState('saved');
+          toast.dismiss('save-error');
         } else {
           setDraftBoth({ ...row, ...diffEditable(row, draftRef.current ?? row) });
           setSaveState('dirty');
@@ -175,10 +195,13 @@ export function useReports() {
           dirtyRef.current = false;
           setSaveState('idle');
           toast.error('This case is locked', { description: `${err.message}. Your last edit was not saved.` });
+          baseRef.current = null; // so the refresh replaces the rejected edit with the server copy
           await refresh();
         } else {
           setSaveState('error');
+          // One toast, updated in place while the server stays unreachable.
           toast.error('Couldn’t save your changes', {
+            id: 'save-error',
             description: `${err.message}. Your edits are still here; retry now or press Ctrl+S.`,
             duration: Infinity,
             closeButton: true,
@@ -229,9 +252,11 @@ export function useReports() {
           return null;
         })
       : Promise.resolve(null);
-    const settingWrite = postJson<{ institution: InstitutionProfile }>('/api/settings', { institution: profile }).catch((error) => {
-      toast.error('Couldn’t save the sign-off profile', { description: (error as Error).message });
-    });
+    const settingWrite = postJson<{ institution: InstitutionProfile }>('/api/settings', { institution: profile })
+      .then((s) => setSettingsProfile(sanitizeProfile(s.institution)))
+      .catch((error) => {
+        toast.error('Couldn’t save the sign-off profile', { description: (error as Error).message });
+      });
     const [row] = await Promise.all([caseWrite, settingWrite]);
     if (row) {
       setReportsBoth((list) => list.map((r) => (r.id === row.id ? row : r)));
@@ -247,7 +272,7 @@ export function useReports() {
     (patch: Partial<InstitutionProfile>) => {
       const local = draftRef.current;
       if (!local || isLocked(local.status)) return;
-      const current = pendingProfile.current ?? profileFromSnapshot(local.institutionJson);
+      const current = pendingProfile.current ?? (local.institutionJson ? profileFromSnapshot(local.institutionJson) : (settingsRef.current ?? profileFromSnapshot(null)));
       const next = sanitizeProfile({ ...current, ...patch });
       pendingProfile.current = next;
       setDraftBoth({ ...local, institutionJson: JSON.stringify(next) });
@@ -274,6 +299,7 @@ export function useReports() {
       dirtyRef.current = false;
       setDraftBoth(row);
       setSaveState('idle');
+      toast.dismiss('save-error');
     },
     [flush],
   );
@@ -286,6 +312,13 @@ export function useReports() {
       if (first) void select(first.id);
     });
   }, [refresh, select]);
+
+  // The stored letterhead profile, once; legacy cases without a snapshot show it on the twin, as the PDF prints it.
+  useEffect(() => {
+    api<{ institution: unknown }>('/api/settings')
+      .then((s) => setSettingsProfile(sanitizeProfile(s.institution)))
+      .catch(() => {});
+  }, []);
 
   // Poll: brisk while the AI is working, relaxed otherwise, paused in background tabs.
   const hasActiveJobs = reports.some((r) => !r.isArchived && (r.status === 'QUEUED' || r.status === 'PROCESSING'));
@@ -331,7 +364,9 @@ export function useReports() {
   const ingest = useCallback(
     async (files: File[]) => {
       const created: ReportItem[] = [];
-      for (const file of files) {
+      const progress = toast.loading(files.length > 1 ? `Adding 1 of ${files.length} notes…` : 'Adding the note…');
+      for (const [i, file] of files.entries()) {
+        if (i > 0) toast.loading(`Adding ${i + 1} of ${files.length} notes…`, { id: progress });
         const form = new FormData();
         form.append('image', file);
         try {
@@ -340,10 +375,30 @@ export function useReports() {
           toast.error(`Couldn’t add ${file.name}`, { description: (error as Error).message, duration: Infinity, closeButton: true });
         }
       }
-      if (!created.length) return;
+      if (!created.length) {
+        toast.dismiss(progress);
+        return;
+      }
       setReportsBoth((list) => [...created.reverse(), ...list]);
       await select(created[0].id);
-      toast.success(created.length === 1 ? 'Note added and queued for the AI' : `${created.length} notes added and queued for the AI`);
+      toast.info(created.length === 1 ? 'Note added and queued for the AI' : `${created.length} notes added and queued for the AI`, { id: progress });
+    },
+    [select],
+  );
+
+  /** Create Report: a case from typed/dictated findings + biodata, queued for the AI at once and opened. Returns true on success. */
+  const createFromText = useCallback(
+    async (input: { patientName: string; age: string; gender: string; modality: string; region: string; sourceText: string }) => {
+      try {
+        const row = await postJson<ReportItem>('/api/ingest-text', input);
+        setReportsBoth((list) => [row, ...list]);
+        await select(row.id);
+        toast.info('Findings sent to the AI');
+        return true;
+      } catch (error) {
+        toast.error('Couldn’t create the report', { description: (error as Error).message });
+        return false;
+      }
     },
     [select],
   );
@@ -354,7 +409,7 @@ export function useReports() {
       await flush();
       try {
         upsert(await postJson<ReportItem>('/api/queue', { action: 'enqueue', reportId: id, force }));
-        toast.success('Queued for the AI');
+        toast.info('Queued for the AI');
         return 'ok';
       } catch (error) {
         const err = error as ApiError;
@@ -409,8 +464,14 @@ export function useReports() {
       form.append('image', file);
       try {
         const { url } = await api<{ url: string }>('/api/upload', { method: 'POST', body: form });
-        update({ imagePath: url });
-        await save();
+        // The photo belongs to the case it was chosen for, even if another case was opened meanwhile.
+        if (draftRef.current?.id === local.id) {
+          update({ imagePath: url });
+          await save();
+        } else {
+          const row = await postJson<ReportItem>('/api/reports', { id: local.id, imagePath: url });
+          setReportsBoth((list) => list.map((r) => (r.id === row.id ? row : r)));
+        }
         toast.success('Source note photo replaced');
       } catch (error) {
         toast.error('Couldn’t replace the photo', { description: (error as Error).message });
@@ -461,6 +522,7 @@ export function useReports() {
     selectedId,
     draft,
     saveState,
+    settingsProfile,
     engineOnline,
     engineBusy: engine.busy,
     engineEngine: engine.engine,
@@ -477,6 +539,7 @@ export function useReports() {
     save,
     flush,
     ingest,
+    createFromText,
     enqueue,
     retryFailed,
     syncInput,

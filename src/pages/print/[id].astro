@@ -38,12 +38,17 @@ const recommendationsList = toLines(report.recommendationsMarkdown);
 const NOT_STATED = 'Not stated in source';
 const stated = (value: string | null) => value?.trim() || NOT_STATED;
 const ageGender = report.age.trim() || report.gender.trim() ? `${stated(report.age)} / ${stated(report.gender)}` : NOT_STATED;
+
+// Screen-only bar. /api/pdf prints this page while the case is still DRAFT, so nothing here may reach print media.
+const finalized = report.status === 'FINALIZED';
 ---
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <!-- Phones fit the 794px page; desktop browsers and page.pdf ignore it. -->
+  <meta name="viewport" content="width=830" />
   <title>{report.patientName} - #{report.tokenNumber} - GMCTH Radiology Report</title>
   <style is:inline>
     @page {
@@ -400,9 +405,125 @@ const ageGender = report.age.trim() || report.gender.trim() ? `${stated(report.a
       font-size: 8px;
       color: #94A3B8;
     }
+
+    /* SCREEN PREVIEW ONLY: the canvas, the lifted A4 sheet and the bar. Print media never sees any of it. */
+    @media print {
+      .screen-bar { display: none !important; }
+    }
+    @media screen {
+      body {
+        background: #ECF0F6;
+        padding: 0;
+      }
+      .a4-page {
+        margin: 32px auto 48px;
+        min-height: 297mm;
+        display: flex;
+        flex-direction: column;
+        border-radius: 6px;
+        box-shadow: 0 0 0 1px rgb(226 232 240 / 0.7), 0 1px 1px rgb(15 23 42 / 0.05), 0 10px 30px -12px rgb(15 23 42 / 0.16);
+      }
+      .a4-page > .footer-block {
+        margin-top: auto;
+      }
+      .screen-bar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        height: 48px;
+        padding: 0 16px;
+        background: rgb(255 255 255 / 0.92);
+        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid #E1E7EF;
+        font-family: "Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        font-size: 13px;
+        line-height: 1;
+        color: #0F172A;
+      }
+      .screen-bar-inner {
+        max-width: 210mm;
+        height: 100%;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .screen-bar-name {
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .screen-bar-token {
+        flex-shrink: 0;
+        color: #546277;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+      }
+      .screen-bar-pill {
+        flex-shrink: 0;
+        height: 24px;
+        padding: 0 9px;
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #B45309;
+        background: #FDF3E4;
+      }
+      .screen-bar-pill.is-final {
+        color: #047857;
+        background: #E6F5EE;
+      }
+      .screen-bar-spacer {
+        flex: 1;
+      }
+      .screen-bar button {
+        flex-shrink: 0;
+        height: 32px;
+        padding: 0 12px;
+        border-radius: 8px;
+        border: 1px solid #E1E7EF;
+        background: #FFFFFF;
+        color: #0F172A;
+        font: inherit;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .screen-bar button:hover {
+        background: #F1F5F9;
+      }
+      .screen-bar button.is-primary {
+        border-color: #0F2C59;
+        background: #0F2C59;
+        color: #FFFFFF;
+      }
+      .screen-bar button.is-primary:hover {
+        background: rgb(15 44 89 / 0.9);
+      }
+      .screen-bar button:focus-visible {
+        outline: 2px solid #2563EB;
+        outline-offset: 2px;
+      }
+    }
   </style>
 </head>
 <body>
+  <div class="screen-bar">
+    <div class="screen-bar-inner">
+      <span class="screen-bar-name" title={report.patientName.trim() || 'Untitled note'}>{report.patientName.trim() || 'Untitled note'}</span>
+      {report.tokenNumber.trim() && <span class="screen-bar-token">#{report.tokenNumber.trim()}</span>}
+      <span class:list={['screen-bar-pill', { 'is-final': finalized }]}>{finalized ? 'Finalized' : 'Draft · not issued'}</span>
+      <span class="screen-bar-spacer"></span>
+      {/* Drafts are issued only through Approve & download (the wording gate), so only a finalized report offers Print. */}
+      {finalized && <button type="button" class="is-primary" onclick="window.print()">Print</button>}
+      <button type="button" onclick="window.close(); setTimeout(() => { if (!window.closed) history.back(); }, 150);">Close</button>
+    </div>
+  </div>
   <div class="a4-page">
     <!-- BODY WRAPPER -->
     <div>

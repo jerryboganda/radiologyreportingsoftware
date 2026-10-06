@@ -22,7 +22,6 @@
     --brand: 15 44 89;
     --brand-ink: 15 44 89;
     --accent: 37 99 235;
-    --accent-strong: 29 78 216;
     --accent-soft: 234 241 254;
     --on-accent: 255 255 255;
     --success: 4 120 87;
@@ -40,6 +39,42 @@
     --shadow-a1: 0.05;
     --shadow-a2: 0.07;
     --shadow-a3: 0.16;
+    --skeleton-a: 0.55;
+
+    /* Fixed in both themes: the light box never themes and the note paper is always paper. */
+    --lightbox-glass: 12 18 28;
+    --note-paper: 251 250 247;
+
+    /* Material (chrome only; nothing printed ever takes one). Blurs and the edge colour are theme-independent. */
+    --brand-lo: 10 31 64;
+    --glass-a: 0.7;
+    --glass-float-a: 0.82;
+    --glass-panel-a: 0.88;
+    --glass-dark-a: 0.72;
+    --glass-blur: blur(14px) saturate(1.6);
+    --glass-float-blur: blur(20px) saturate(1.7);
+    --glass-edge: 255 255 255;
+    --glass-edge-a: 0.7;
+    --glow-1: 37 99 235;
+    --glow-1-a: 0.22;
+    --glow-2: 15 44 89;
+    --glow-2-a: 0.12;
+    --shimmer: 147 197 253;
+    --scrim: 15 23 42;
+    --scrim-a: 0.3;
+    --scrim-blur: blur(4px) saturate(1.1);
+    --desk-light: 255 255 255;
+    --desk-light-a: 0.85;
+    --paper-glow: 37 99 235;
+    --paper-glow-a: 0.16;
+    --paper-edge-a: 0;
+
+    /* Motion: arrivals, state changes, exits, loops. The spring is spring.pop (784/28/1, src/lib/motion.ts) sampled over 320ms. */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --ease-in: cubic-bezier(0.4, 0, 1, 1);
+    --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
+    --ease-spring: linear(0, 0.128 6.25%, 0.405 12.5%, 0.703 18.75%, 0.942 25%, 1.092 31.25%, 1.157 37.5%, 1.163 40.6%, 1.12 50%, 1.026 62.5%, 0.978 75%, 0.973 81.25%, 0.985 93.75%, 1);
   }
 
   .dark {
@@ -57,7 +92,6 @@
     --brand: 59 111 224;
     --brand-ink: 176 198 248;
     --accent: 125 164 250;
-    --accent-strong: 160 189 252;
     --accent-soft: 27 42 72;
     --on-accent: 255 255 255;
     --success: 98 206 160;
@@ -75,6 +109,25 @@
     --shadow-a1: 0.35;
     --shadow-a2: 0.4;
     --shadow-a3: 0.55;
+    --skeleton-a: 0.9;
+
+    --brand-lo: 44 92 200;
+    --glass-a: 0.62;
+    --glass-float-a: 0.78;
+    --glass-panel-a: 0.84;
+    --glass-edge-a: 0.07;
+    --glow-1: 59 111 224;
+    --glow-1-a: 0.26;
+    --glow-2: 125 164 250;
+    --glow-2-a: 0.1;
+    --shimmer: 191 219 254;
+    --scrim: 2 4 8;
+    --scrim-a: 0.55;
+    --desk-light: 125 164 250;
+    --desk-light-a: 0.07;
+    --paper-glow: 59 111 224;
+    --paper-glow-a: 0.22;
+    --paper-edge-a: 0.06;
   }
 
   /* The root keeps the browser's 16px so every rem in the scale lands on its intended size. */
@@ -84,14 +137,23 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /* No pull-to-refresh or scroll chaining out of the fixed workstation shell. */
+  html,
   body {
-    @apply bg-canvas text-base;
+    overscroll-behavior: none;
   }
 
-  /* The parts of the browser nobody draws still carry the design. */
+  /* Landscape notches: horizontal insets only, so the h-dvh shell keeps its height. */
+  body {
+    @apply bg-canvas text-base;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* The parts of the browser nobody draws still carry the design. Selected text keeps its own colour:
+     the note paper and the light box never theme, so a theme ink would vanish on them. */
   ::selection {
     background: rgb(var(--accent) / 0.22);
-    color: rgb(var(--ink));
   }
 
   * {
@@ -126,7 +188,8 @@
     color: rgb(var(--muted) / 0.85);
   }
 
-  /* Theme switch crossfade (document.startViewTransition); never blocks clicks. */
+  /* View Transitions never block clicks. The root crossfade is the default; the theme switch replaces it
+     with a circular reveal and layout transitions add named groups (both unlayered, at the end). */
   ::view-transition {
     pointer-events: none;
   }
@@ -145,23 +208,51 @@
     resize: none;
   }
 
+  /* The shimmer is a transform on a pseudo-element (compositor only).
+     To stop it, target the pseudo: [&_.skeleton]:after:animate-none. */
   .skeleton {
-    background: linear-gradient(90deg, rgb(var(--surface-3)) 25%, rgb(var(--line)) 37%, rgb(var(--surface-3)) 63%);
-    background-size: 400% 100%;
+    position: relative;
+    overflow: hidden;
+    background-color: rgb(var(--surface-3));
     border-radius: 0.375rem;
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    .skeleton {
-      animation: shimmer 1.8s linear infinite;
+    .skeleton::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgb(var(--line-strong) / var(--skeleton-a)), transparent);
+      transform: translateX(-100%);
+      animation: skeleton-sweep 1.8s linear infinite;
     }
   }
 
-  /* The reading-room light box behind the note photo: stays dark in both themes. */
-  .lightbox-bg {
+  /* The reading-room light box behind the note photo: stays near-black in both themes (centre ≈ #141923 /
+     #0F131C). The field is a vignette to black; the cool backlight is a separate layer that may drift.
+     Neither uses a theme token except --lightbox, and the field itself never animates. */
+  .lightbox-field {
     background:
-      radial-gradient(120% 90% at 50% 40%, rgb(255 255 255 / 0.05), transparent 65%),
+      radial-gradient(130% 100% at 50% 45%, transparent 55%, rgb(0 0 0 / 0.45) 100%),
       rgb(var(--lightbox));
+  }
+
+  .lightbox-glow {
+    background: radial-gradient(70% 55% at 50% 42%, rgb(170 195 255 / 0.06), transparent 70%);
+  }
+
+  /* Its scrollbars stay light-on-dark whatever the app theme. */
+  .lightbox-field,
+  .lightbox-field * {
+    scrollbar-color: rgb(255 255 255 / 0.18) transparent;
+  }
+
+  .lightbox-field ::-webkit-scrollbar-thumb {
+    background-color: rgb(255 255 255 / 0.18);
+  }
+
+  .lightbox-field ::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(255 255 255 / 0.3);
   }
 
   /* Hairline pattern of a radiology light box: the "reading" beam travels over it. */
@@ -176,6 +267,183 @@
       rgb(96 145 250 / 0) 70%,
       transparent 100%
     );
+  }
+
+  /* Scanner carriage ticks at both paper edges, and a faint afterglow trailing above the line. Both ride the
+     beam's own transform, so the blur is rasterized once. Fixed colours: the light box never themes. */
+  .scan-beam::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(rgb(186 210 255 / 0.95) 0 0) left 50% / 3px 12px no-repeat,
+      linear-gradient(rgb(186 210 255 / 0.95) 0 0) right 50% / 3px 12px no-repeat;
+  }
+
+  .scan-beam::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -45%;
+    bottom: 45%;
+    background: linear-gradient(180deg, transparent, rgb(96 145 250 / 0.12) 70%, transparent);
+    filter: blur(6px);
+  }
+
+  /* Materials: one recipe per surface type, chrome only, never printed content.
+     glass: static chrome over the glow, no blur. glass-bar: bars with content moving behind them
+     (retint with [--glass-tint:var(--canvas)]). glass-float: menus, popovers, toasts. glass-panel: sits
+     over the scrim, which already blurs. glass-ink: tooltips. glass-dark: light-box controls, both themes. */
+  .glass {
+    background-color: rgb(var(--surface) / var(--glass-a));
+  }
+
+  .glass-bar {
+    background-color: rgb(var(--glass-tint, var(--surface)) / var(--glass-a));
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+
+  .glass-float {
+    background-color: rgb(var(--surface) / var(--glass-float-a));
+    -webkit-backdrop-filter: var(--glass-float-blur);
+    backdrop-filter: var(--glass-float-blur);
+  }
+
+  .glass-panel {
+    background-color: rgb(var(--surface) / var(--glass-panel-a));
+  }
+
+  .glass-ink {
+    background-color: rgb(var(--ink) / var(--glass-float-a));
+    -webkit-backdrop-filter: var(--glass-float-blur);
+    backdrop-filter: var(--glass-float-blur);
+  }
+
+  .glass-dark {
+    background-color: rgb(var(--lightbox-glass) / var(--glass-dark-a));
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+
+  /* Modal scrim: a static blur; only its opacity animates. */
+  .scrim {
+    background-color: rgb(var(--scrim) / var(--scrim-a));
+    -webkit-backdrop-filter: var(--scrim-blur);
+    backdrop-filter: var(--scrim-blur);
+  }
+
+  /* The static brand glow, top-left, behind the glass chrome (the workspace root and the first-paint shell). */
+  .app-glow {
+    background:
+      radial-gradient(40rem 24rem at -4rem -6rem, rgb(var(--glow-1) / var(--glow-1-a)), transparent 70%),
+      radial-gradient(44rem 14rem at 34rem -7rem, rgb(var(--glow-2) / var(--glow-2-a)), transparent 72%),
+      rgb(var(--canvas));
+  }
+
+  /* The 56px bar hairline, lit cobalt at the far left. Fixed attachment anchors it to the viewport, so the
+     sidebar brand bar and the case header read as one line. Use as after:glow-rule; never transform its
+     ancestors at rest. */
+  .glow-rule {
+    background: linear-gradient(90deg, rgb(var(--accent) / 0.6), rgb(var(--accent) / 0.3) 20rem, rgb(var(--line)) 48rem) fixed;
+  }
+
+  /* A desk lamp over the letterhead. On the report's inner content (default attachment), never the scroller. */
+  .desk-light {
+    background: radial-gradient(56rem 26rem at 50% -6rem, rgb(var(--desk-light) / var(--desk-light-a)), transparent 70%) no-repeat;
+  }
+
+  /* Press and release. The transform leg runs on the pop spring; the press itself and the transform live in
+     a no-preference block below. Remove the element's own transition-* utilities, which would override it. */
+  .press {
+    transition-property: color, background-color, border-color, box-shadow, opacity, filter, transform;
+    transition-duration: 120ms, 120ms, 120ms, 180ms, 120ms, 120ms, 320ms;
+    transition-timing-function: var(--ease-standard), var(--ease-standard), var(--ease-standard), var(--ease-standard),
+      var(--ease-standard), var(--ease-standard), var(--ease-spring);
+  }
+
+  .press:active {
+    transition-duration: 90ms;
+    transition-timing-function: var(--ease-standard);
+  }
+
+  /* A soft shadow under the sticky section nav that fades in over the first 32px of scroll. Scroll-linked
+     state, not timed motion; without scroll timelines the hairline remains. */
+  .bar-lift::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    height: 12px;
+    pointer-events: none;
+    background: linear-gradient(rgb(var(--shadow) / var(--shadow-a2)), transparent);
+    opacity: 0;
+  }
+
+  @supports (animation-timeline: scroll()) {
+    .bar-lift::after {
+      animation: bar-lift linear both;
+      animation-timeline: scroll(nearest block);
+      animation-range: 0 32px;
+    }
+  }
+
+  /* A case row "lands" when the AI finishes: the Generating cobalt blooms and a band of light sweeps across. */
+  .land {
+    position: absolute;
+    inset: 0 0 2px;
+    z-index: -1;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    pointer-events: none;
+    background: rgb(var(--accent-soft));
+    opacity: 0;
+  }
+
+  .land::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    width: 45%;
+    background: linear-gradient(90deg, transparent, rgb(var(--accent) / 0.18), transparent);
+    transform: translateX(-100%);
+  }
+
+  /* The one enabled next-step primary: a 22% static rim on its 1px edge, with a glint that runs round it. */
+  .shimmer-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    overflow: hidden;
+    pointer-events: none;
+    background: rgb(var(--shimmer) / 0.22);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+  }
+
+  .shimmer-ring::before {
+    content: '';
+    position: absolute;
+    top: -40%;
+    bottom: -40%;
+    left: 0;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, rgb(var(--shimmer) / 0.95), transparent);
+    transform: translateX(-120%) skewX(-20deg);
+  }
+
+  /* A cobalt halo that breathes once around (never on) the paper while a draft develops: an outer
+     box-shadow paints only outside the border box, and the span has no background. */
+  .develop-halo {
+    box-shadow:
+      0 0 0 1px rgb(var(--accent) / 0.45),
+      0 0 36px -6px rgb(var(--accent) / 0.4);
+    opacity: 0;
   }
 }
 
@@ -193,13 +461,339 @@
   }
 }
 
-@keyframes shimmer {
+@keyframes skeleton-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Shared one-shot keyframes: the Tailwind animate-* shorthands and the CSS components both use them.
+   --dir is the direction of travel: 1 down or forwards, -1 up or back. */
+@keyframes case-in {
   from {
-    background-position: 200% 0;
+    opacity: 0;
+    transform: translateY(calc(var(--dir, 1) * 12px));
+  }
+}
+
+@keyframes swap-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--dir, 1) * 4px));
+  }
+}
+
+@keyframes list-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--dir, 1) * 12px));
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+@keyframes halo {
+  30% {
+    opacity: 1;
+  }
+}
+
+@keyframes siren {
+  20% {
+    transform: rotate(-14deg);
+  }
+  40% {
+    transform: rotate(12deg);
+  }
+  60% {
+    transform: rotate(-8deg);
+  }
+  80% {
+    transform: rotate(5deg);
+  }
+}
+
+@keyframes bar-lift {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes land {
+  15% {
+    opacity: 1;
+  }
+}
+
+@keyframes land-sweep {
+  to {
+    transform: translateX(240%);
+  }
+}
+
+@keyframes shimmer-sweep {
+  15%,
+  100% {
+    transform: translateX(380%) skewX(-20deg);
+  }
+}
+
+@keyframes intro-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes mark-draw {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* Interpolates from and back to the BrandMark's static drop-shadow(0 3px 8px accent/0.35). */
+@keyframes mark-glow {
+  40% {
+    filter: drop-shadow(0 0 6px rgb(var(--accent) / 0.55));
+  }
+}
+
+@keyframes mark-gloss {
+  to {
+    transform: translateX(52px);
+  }
+}
+
+@keyframes sparkle-twinkle {
+  45% {
+    opacity: 0.2;
+    transform: scale(0.4);
+  }
+}
+
+@keyframes spin-ccw {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+/* The theme spreads in a circle from the theme switch (bottom-left: the sidebar or drawer footer).
+   The origin may be moved with --reveal-x / --reveal-y on <html>. */
+@keyframes theme-reveal {
+  from {
+    clip-path: circle(0 at var(--reveal-x, 2.5rem) var(--reveal-y, calc(100% - 1.5rem)));
   }
   to {
-    background-position: -200% 0;
+    clip-path: circle(150vmax at var(--reveal-x, 2.5rem) var(--reveal-y, calc(100% - 1.5rem)));
   }
+}
+
+/* Component motion: every timed transform, loop and one-shot here plays only when motion is welcome. */
+@media (prefers-reduced-motion: no-preference) {
+  /* Press sinks at once (90ms) and springs back on release; hover-capable pointers lift primaries 1px. */
+  .press:active:not(:disabled) {
+    transform: scale(var(--press, 0.96));
+  }
+
+  @media (hover: hover) {
+    .lift:hover:not(:active):not(:disabled):not([aria-disabled='true']) {
+      transform: translateY(-1px);
+    }
+  }
+
+  /* Once a toast lands its state icon pops, including the swap from loading to done. */
+  [data-sonner-toast] [data-icon] > svg {
+    animation: pop-in 320ms var(--ease-spring) 120ms backwards;
+  }
+
+  /* Icon micro-interactions (lucide adds lucide-<name> classes), all within 320ms. */
+  .lucide-sparkles,
+  .lucide-rotate-ccw {
+    transition: transform 320ms var(--ease-spring);
+  }
+
+  @media (hover: hover) {
+    :is(button, a):hover > .lucide-sparkles {
+      transform: rotate(14deg) scale(1.08);
+    }
+
+    :is(button, a):hover > .lucide-sparkles > path:not(:first-child) {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: sparkle-twinkle 260ms var(--ease-out);
+    }
+
+    :is(button, a):hover > .lucide-sparkles > path:nth-child(n + 4) {
+      animation-delay: 60ms;
+    }
+
+    :is(button, a):hover > .lucide-rotate-ccw {
+      animation: spin-ccw 320ms var(--ease-out);
+    }
+  }
+
+  .land {
+    animation: land 900ms var(--ease-out);
+  }
+
+  .land::after {
+    animation: land-sweep 700ms var(--ease-in-out);
+  }
+
+  /* A 900ms glint every 6s, the first 1.2s after the button becomes available; idle 85% of each cycle. */
+  .shimmer-ring::before {
+    animation: shimmer-sweep 6s var(--ease-in-out) 1.2s infinite;
+    will-change: transform;
+  }
+
+  /* App reveal: while the workspace root carries .intro (about 900ms after the cases load), marked blocks
+     rise in a 50ms cascade. [data-intro] owns the animation for blocks with no entrance of their own;
+     [data-intro-delay] only retimes an element's own case-in or swap-in, so removing .intro never replays it. */
+  .intro [data-intro] {
+    animation: intro-rise 420ms var(--ease-out) backwards;
+    animation-delay: calc(var(--i, 0) * 50ms);
+  }
+
+  .intro [data-intro-delay] {
+    animation-delay: calc(var(--i, 0) * 50ms);
+  }
+
+  .intro [data-intro-delay='sheet'] {
+    animation-duration: 520ms;
+    animation-delay: calc(80ms + var(--i, 0) * 50ms);
+  }
+
+  /* BrandMark intro, once per load: the four report lines draw, the cobalt cell pops, a gloss sweeps and the
+     tile glows once. Lines end at 710ms, the cell at 760ms, the gloss at 880ms, the glow at 900ms. */
+  .intro .brand-mark {
+    animation: mark-glow 900ms var(--ease-out);
+  }
+
+  .intro .mark-line {
+    transform-box: fill-box;
+    transform-origin: 0 50%;
+    animation: mark-draw 420ms var(--ease-out) backwards;
+    animation-delay: calc(80ms + var(--i, 0) * 70ms);
+  }
+
+  .intro .mark-cell {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: pop-in 320ms var(--ease-spring) 440ms backwards;
+  }
+
+  .intro .mark-gloss {
+    animation: mark-gloss 400ms var(--ease-standard) 480ms backwards;
+  }
+}
+
+/*
+ * Sidebar collapse and focus mode as View Transitions (viewTransition('layout') in src/lib/motion.ts).
+ * The names exist only while html[data-vt='layout'], so the theme switch stays root-only. object-fit: none
+ * never stretches a snapshot; each is anchored where its content is anchored.
+ */
+html[data-vt='layout'] [data-vt-name='queue'] {
+  view-transition-name: queue;
+}
+
+html[data-vt='layout'] [data-vt-name='note'] {
+  view-transition-name: note;
+}
+
+html[data-vt='layout'] [data-vt-name='report'] {
+  view-transition-name: report;
+}
+
+html[data-vt='layout'] [data-vt-name='case-title'] {
+  view-transition-name: case-title;
+}
+
+html[data-vt='layout'] [data-vt-name='case-actions'] {
+  view-transition-name: case-actions;
+}
+
+html[data-vt='layout']::view-transition-group(*) {
+  animation-duration: 280ms;
+  animation-timing-function: var(--ease-out);
+}
+
+html[data-vt='layout']::view-transition-image-pair(queue),
+html[data-vt='layout']::view-transition-image-pair(note),
+html[data-vt='layout']::view-transition-image-pair(report) {
+  overflow: clip;
+}
+
+html[data-vt='layout']::view-transition-old(*),
+html[data-vt='layout']::view-transition-new(*) {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: none;
+}
+
+html[data-vt='layout']::view-transition-old(report),
+html[data-vt='layout']::view-transition-new(report) {
+  object-position: 50% 0;
+}
+
+html[data-vt='layout']::view-transition-old(note),
+html[data-vt='layout']::view-transition-new(note) {
+  object-position: 50% 50%;
+}
+
+html[data-vt='layout']::view-transition-old(queue),
+html[data-vt='layout']::view-transition-new(queue) {
+  object-position: 100% 0;
+}
+
+html[data-vt='layout']::view-transition-old(case-title),
+html[data-vt='layout']::view-transition-new(case-title) {
+  object-position: 0 50%;
+}
+
+html[data-vt='layout']::view-transition-old(case-actions),
+html[data-vt='layout']::view-transition-new(case-actions) {
+  object-position: 100% 50%;
+}
+
+/* Panes that only move or resize morph from one snapshot: crossfading two offset snapshots double-exposes the text. */
+html[data-vt='layout']::view-transition-old(note),
+html[data-vt='layout']::view-transition-old(report),
+html[data-vt='layout']::view-transition-old(case-title),
+html[data-vt='layout']::view-transition-old(case-actions) {
+  animation: none;
+  opacity: 0;
+}
+
+html[data-vt='layout']::view-transition-new(note),
+html[data-vt='layout']::view-transition-new(report),
+html[data-vt='layout']::view-transition-new(case-title),
+html[data-vt='layout']::view-transition-new(case-actions) {
+  animation: none;
+}
+
+html[data-vt='layout']::view-transition-group(note) {
+  background: rgb(var(--lightbox));
+}
+
+html[data-vt='layout']::view-transition-group(report) {
+  background: rgb(var(--canvas));
+}
+
+/* Theme switch: a circular reveal (viewTransition('theme')). Normal blending: the default plus-lighter
+   would brighten the overlap. The helper skips the transition under reduced motion. */
+html[data-vt='theme']::view-transition-old(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+html[data-vt='theme']::view-transition-new(root) {
+  animation: theme-reveal 320ms var(--ease-out);
+  mix-blend-mode: normal;
 }
 
 /* 44px targets for touch and pen. */
@@ -207,5 +801,65 @@
   .touch-target {
     min-height: 44px;
     min-width: 44px;
+  }
+}
+
+/*
+ * The Reduced Motion Contract: every tailwindcss-animate enter or exit becomes a plain fade (the fade still
+ * fires animationend, so Radix Presence unmounts on time). An attribute selector, because
+ * data-[state=open]:animate-in never carries a bare .animate-in class. Unguarded spin and ping loops stop.
+ */
+@media (prefers-reduced-motion: reduce) {
+  [class*='animate-in'],
+  [class*='animate-out'] {
+    --tw-enter-scale: 1 !important;
+    --tw-enter-translate-x: 0 !important;
+    --tw-enter-translate-y: 0 !important;
+    --tw-enter-rotate: 0 !important;
+    --tw-exit-scale: 1 !important;
+    --tw-exit-translate-x: 0 !important;
+    --tw-exit-translate-y: 0 !important;
+    --tw-exit-rotate: 0 !important;
+  }
+
+  .animate-spin,
+  .animate-ping {
+    animation: none;
+  }
+}
+
+/* While a modal scrim is open, every CSS animation in the workspace pauses so its blur paints once.
+   Dialogs, tooltips, toasts and the drawer are portaled outside [data-workspace] and keep running. */
+body:has(.scrim[data-state='open']) [data-workspace] *,
+body:has(.scrim[data-state='open']) [data-workspace] *::before,
+body:has(.scrim[data-state='open']) [data-workspace] *::after {
+  animation-play-state: paused !important;
+}
+
+/* The static first-paint shell honours a collapsed queue (the head script sets data-queue before paint). */
+html[data-queue='closed'] .shell-queue {
+  display: none;
+}
+
+/* Reduced transparency, more contrast, forced colours: solid chrome, no glow (brand glow and desk light).
+   Unlayered and last, so it beats the base-layer tokens at equal specificity. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active) {
+  :root,
+  .dark {
+    --glass-a: 1;
+    --glass-float-a: 1;
+    --glass-panel-a: 1;
+    --glass-dark-a: 0.95;
+    --glass-blur: none;
+    --glass-float-blur: none;
+    --scrim-blur: none;
+    --scrim-a: 0.45;
+    --glow-1-a: 0;
+    --glow-2-a: 0;
+    --desk-light-a: 0;
+  }
+
+  .dark {
+    --scrim-a: 0.6;
   }
 }

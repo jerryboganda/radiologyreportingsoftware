@@ -47,6 +47,10 @@ export interface ReportItem {
   isArchived: boolean | null;
   lastError: string | null;
   ownerNotes: string | null;
+  /** Region picked in Create Report; null for photo cases. */
+  region: string | null;
+  /** Typed/dictated positive findings (the senior's note when there is no photo); null for photo cases. */
+  sourceText: string | null;
   /** Signature of the flagged wording the resident confirmed (lib/wording.ts); null when nothing was confirmed. */
   wordingAck: string | null;
   /** The letterhead / sign-off profile this case prints with, snapshotted at creation. */
@@ -198,12 +202,17 @@ export function validateWorkerResult(value: unknown): string[] {
   return errors;
 }
 
-/** Maps a validated worker result onto report columns. Never touches urgentCallLog: only a human logs calls. */
-export function workerResultToColumns(r: WorkerResult) {
+/**
+ * Maps a validated worker result onto report columns. Never touches urgentCallLog: only a human logs calls.
+ * `owner` is the case's row when it came from Create Report: the biodata the radiologist typed there
+ * outranks whatever the AI returned (a blank from the AI never wipes it).
+ */
+export function workerResultToColumns(r: WorkerResult, owner?: Pick<ReportItem, 'patientName' | 'age' | 'gender' | 'sourceText'> | null) {
+  const typed = owner?.sourceText?.trim() ? owner : null;
   return {
-    patientName: r.patientName,
-    age: r.age,
-    gender: r.gender,
+    patientName: typed?.patientName.trim() || r.patientName,
+    age: typed?.age.trim() || r.age,
+    gender: typed?.gender.trim() || r.gender,
     tokenNumber: r.tokenNumber,
     mrNumber: r.mrNumber,
     modality: r.modality,

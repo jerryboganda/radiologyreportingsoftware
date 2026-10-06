@@ -101,14 +101,17 @@ export const POST: APIRoute = async ({ request }) => {
 
       case 'complete': {
         workerBusy = false;
-        const [row] = await db.select({ status: reports.status }).from(reports).where(eq(reports.id, reportId));
+        const [row] = await db
+          .select({ status: reports.status, patientName: reports.patientName, age: reports.age, gender: reports.gender, sourceText: reports.sourceText })
+          .from(reports)
+          .where(eq(reports.id, reportId));
         if (!row) return Response.json({ error: 'Report not found' }, { status: 404 });
         if (row.status !== 'PROCESSING') {
           return Response.json({ error: `Case is ${row.status}, not PROCESSING` }, { status: 409 });
         }
         const errors = validateWorkerResult(body.result);
         if (errors.length) return Response.json({ errors }, { status: 422 });
-        return guardedUpdate(reportId, workerResultToColumns(body.result as WorkerResult), eq(reports.status, 'PROCESSING'));
+        return guardedUpdate(reportId, workerResultToColumns(body.result as WorkerResult, row), eq(reports.status, 'PROCESSING'));
       }
 
       case 'fail':

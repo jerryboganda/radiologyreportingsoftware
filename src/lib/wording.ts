@@ -24,7 +24,7 @@ export interface WordingFlag {
   after: string;
 }
 
-type Source = Pick<ReportItem, 'findingsJson' | 'impressionMarkdown' | 'recommendationsMarkdown' | 'urgentFindings' | 'verbatimTranscription' | 'ownerNotes' | 'auditStatus'>;
+type Source = Pick<ReportItem, 'findingsJson' | 'impressionMarkdown' | 'recommendationsMarkdown' | 'isUrgent' | 'urgentFindings' | 'verbatimTranscription' | 'ownerNotes' | 'auditStatus'> & { sourceText?: string | null };
 
 interface Entry {
   /** Global regex over the report text. */
@@ -213,7 +213,7 @@ const NEGATOR = /\b(?:no|nor|not|without|nil|none|neither|absent|absence|negativ
 const CLAUSE_BREAK = /\b(?:but|however|although|though|whereas|while|except|apart\s+from|other\s+than)\b|,\s+and\s+(?=(?:a|an|the|there|with|this|it)\b)/gi;
 const NEGATED_AFTER = /^[^.;:]{0,30}?\b(?:is|are|was|were)?\s*(?:not\s+(?:seen|identified|demonstrated|visuali[sz]ed|present|evident|noted)|absent|excluded)\b/i;
 
-/** One line per bullet or numbered point, without markers. The editor lists use the same rule, so line indexes agree. */
+/** One line per bullet or numbered point, without markers. The editor lists count only their non-blank rows, so line indexes agree. */
 export const splitLines = (markdown: string): string[] =>
   markdown
     .split('\n')
@@ -237,7 +237,7 @@ interface Reference {
 function referenceOf(r: Source): Reference | null {
   // Legacy cases have no trustworthy transcription; manual reports have none at all.
   if (r.auditStatus === 'LEGACY') return null;
-  const text = `${r.verbatimTranscription ?? ''}\n${r.ownerNotes ?? ''}`.replace(/\[\?\]/g, ' ').toLowerCase();
+  const text = `${r.verbatimTranscription ?? ''}\n${r.ownerNotes ?? ''}\n${r.sourceText ?? ''}`.replace(/\[\?\]/g, ' ').toLowerCase();
   if (text.trim().length < 15) return null;
   return { text, numbers: new Set(text.match(/\d+(?:\.\d+)?/g) ?? []) };
 }
@@ -292,7 +292,8 @@ export function checkWording(r: Source): WordingFlag[] {
   const out: WordingFlag[] = [];
   const seen = new Set<string>();
 
-  if (r.urgentFindings?.trim()) scan(r.urgentFindings, { key: 'urgent', section: 'urgent', where: 'Red box' }, ref, out, seen);
+  // The red box prints only on an urgent case (print/[id].astro), so text left in it after urgent is cleared is not checked.
+  if (r.isUrgent && r.urgentFindings?.trim()) scan(r.urgentFindings, { key: 'urgent', section: 'urgent', where: 'Red box' }, ref, out, seen);
 
   let sections: unknown = [];
   try {

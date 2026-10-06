@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { flushSync } from 'react-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { viewTransition } from '../../lib/motion';
 
 export type ThemePref = 'system' | 'light' | 'dark';
 
@@ -32,22 +32,38 @@ export function useTheme() {
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', resolved === 'dark');
+    // Browser chrome follows the in-app theme (the surface colour of the top bars), not the OS.
+    for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
+      meta.removeAttribute('media');
+      meta.setAttribute('content', resolved === 'dark' ? '#101622' : '#FFFFFF');
+    }
   }, [resolved]);
 
-  const choose = (next: ThemePref) => {
-    try {
-      localStorage.setItem('theme', next);
-    } catch {}
-    const apply = () => {
-      flushSync(() => setPref(next));
-      document.documentElement.classList.toggle('dark', resolve(next, systemDark) === 'dark');
-    };
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (document.startViewTransition && !reduce) document.startViewTransition(apply);
-    else apply();
-  };
+  const choose = useCallback(
+    (next: ThemePref) => {
+      try {
+        localStorage.setItem('theme', next);
+      } catch {}
+      // The circular reveal spreads from the switch that was pressed (it holds focus after the click);
+      // without one (Safari does not focus clicked buttons) the CSS falls back to the bottom-left corner.
+      const root = document.documentElement;
+      const from = document.activeElement !== document.body ? document.activeElement?.getBoundingClientRect() : undefined;
+      if (from) {
+        root.style.setProperty('--reveal-x', `${from.left + from.width / 2}px`);
+        root.style.setProperty('--reveal-y', `${from.top + from.height / 2}px`);
+      } else {
+        root.style.removeProperty('--reveal-x');
+        root.style.removeProperty('--reveal-y');
+      }
+      viewTransition('theme', () => {
+        setPref(next);
+        document.documentElement.classList.toggle('dark', resolve(next, systemDark) === 'dark');
+      });
+    },
+    [systemDark],
+  );
 
-  return { pref, resolved, choose };
+  return useMemo(() => ({ pref, resolved, choose }), [pref, resolved, choose]);
 }
 
 export type ThemeApi = ReturnType<typeof useTheme>;

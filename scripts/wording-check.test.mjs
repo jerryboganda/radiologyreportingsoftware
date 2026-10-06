@@ -16,6 +16,7 @@ const base = {
   findingsJson: '[]',
   impressionMarkdown: '',
   recommendationsMarkdown: '',
+  isUrgent: true,
   urgentFindings: '',
   verbatimTranscription: NOTE,
   ownerNotes: null,
@@ -151,6 +152,13 @@ test('the signature follows the flagged terms and sections, not their order or p
   assert.equal(wordingSignature(a), wordingSignature(b));
   assert.notEqual(wordingSignature(a), wordingSignature(checkWording({ ...base, impressionMarkdown: '1. Abscess.' })));
   assert.equal(wordingSignature([]), '');
+});
+
+test('the red box is checked only on an urgent case: it does not print otherwise', () => {
+  const urgentFindings = 'Duodenal perforation.';
+  assert.deepEqual(terms(checkWording({ ...base, urgentFindings })), ['perforation']);
+  assert.deepEqual(checkWording({ ...base, isUrgent: false, urgentFindings }), []);
+  assert.deepEqual(checkWording({ ...base, isUrgent: null, urgentFindings }), []);
 });
 
 test('an unreadable findings list does not crash the check', () => {

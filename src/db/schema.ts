@@ -34,6 +34,10 @@ export const reports = sqliteTable('reports', {
   isArchived: integer('is_archived', { mode: 'boolean' }).default(false),
   lastError: text('last_error'),
   ownerNotes: text('owner_notes'),
+  /** Study region picked in Create Report (modality itself lives in `modality`). */
+  region: text('region'),
+  /** The positive findings typed or dictated in Create Report: the senior's note when there is no photo. */
+  sourceText: text('source_text'),
   // Signature of the flagged wording the resident confirmed (lib/wording.ts wordingSignature); null = nothing confirmed.
   wordingAck: text('wording_ack'),
   /** The letterhead / sign-off profile printed with this case (snapshotted at creation). */

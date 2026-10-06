@@ -89,4 +89,9 @@ if (!columns.has('wording_ack')) await client.execute('ALTER TABLE reports ADD C
 // The letterhead / sign-off profile each case prints with. Written by the app on creation.
 if (!columns.has('institution_json')) await client.execute('ALTER TABLE reports ADD COLUMN institution_json TEXT');
 
+// Create Report intake: the picked region and the typed/dictated note (no photo).
+for (const c of ['region', 'source_text']) {
+  if (!columns.has(c)) await client.execute(`ALTER TABLE reports ADD COLUMN ${c} TEXT`);
+}
+
 export const db = drizzle(client, { schema });
