@@ -2,7 +2,7 @@
 
 **Where it runs:** shared VPS `185.252.233.186` (`ssh vps`), `/opt/docker/polytronx-radiology`, container `polytronx-radiology-app` on the Docker network `platform`. No published ports: Nginx Proxy Manager (proxy host id 48, Let's Encrypt cert id 51, auto-renewing) forwards `radiology.polytronx.com` to `polytronx-radiology-app:4321`; Cloudflare sits in front.
 
-**Sign-in:** HTTP Basic Auth. User `radiology`, password in `/opt/docker/polytronx-radiology/.env` (`BASIC_AUTH_PASS`, mode 600) and in the git-ignored `start-worker-production.cmd` on the reporting PC. Only `/api/health` is open.
+**Sign-in:** HTTP Basic Auth. User `radiology`, password in `/opt/docker/polytronx-radiology/.env` (`BASIC_AUTH_PASS`, mode 600). Only `/api/health` is open.
 
 ## Update the app
 1. Push to `main`. GitHub Actions (`.github/workflows/image.yml`) builds and pushes `ghcr.io/jerryboganda/radiologyreportingsoftware:latest`. The VPS never builds.
@@ -10,14 +10,14 @@
 3. Check: `AUTH_PASS=... node scripts/auth-check.mjs https://radiology.polytronx.com` (read-only).
 
 ## Change the password
-Edit `.env` on the VPS, run `docker compose up -d`, then update `start-worker-production.cmd` on the PC and restart the worker.
+Edit `.env` on the VPS and run `docker compose up -d`.
 
 ## AI engine (runs on the VPS, 24/7)
 The `worker` container (`polytronx-radiology-worker`, same image as the app) claims queued cases over the internal network and runs both engines server-side, so reports process even when the reporting PC is off:
 - **antigravity**: the `agy` CLI baked into the image (linux-x64, from Google's updater manifest). Its Google sign-in (AI Pro subscription quota — never API billing) lives in `./agy-home` + `./agy-keyrings` next to the compose file; the entrypoint starts a session dbus and unlocks the keyring with `KEYRING_PASSWORD` from the `.env`.
 - **opencode**: direct HTTPS to the OpenCode Go gateway (`https://opencode.ai/zen/go/v1`) with `OPENCODE_API_KEY` from the `.env`.
 
-Engine and model follow the app's Settings; both are always available server-side. The reporting PC's own worker (`start-worker-production.cmd`, autostart task) keeps running as redundancy — jobs are claimed one at a time, so both can coexist safely.
+Engine and model follow the app's Settings; both are always available server-side. (The reporting PC's autostart tasks, VBS watchdogs and `start-worker-production.cmd` were removed on 6 Oct 2026 — the server worker is the only production engine. The local app on the PC is started manually with `start-app.cmd` when wanted; its local queue is served by `npm run worker` on that PC, server-side workers never touch it.)
 
 ### One-time worker seeding (already done 6 Oct 2026)
 `./agy-home` holds the signed-in agy state (`~/.gemini` files incl. `antigravity-cli/antigravity-oauth-token`); `./agy-keyrings` holds the Secret Service store (`login.keyring`, `user.keystore`), encrypted with `KEYRING_PASSWORD`. Both are chowned 1000:1000. If the sign-in ever needs redoing: delete both dirs, run the agy sign-in interactively in a throwaway container (mount them at `/home/node/.gemini` and `/home/node/.local/share/keyrings`, with `dbus` + `gnome-keyring` installed, unlock with the `.env` password, choose Google OAuth, paste the authorization code from the callback page), then chown again.
