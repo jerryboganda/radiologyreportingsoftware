@@ -13,7 +13,7 @@ LABEL org.opencontainers.image.source="https://github.com/jerryboganda/radiology
 # Chromium renders the A4 PDF; Roboto stands in for the print template's system UI stack.
 # dbus + gnome-keyring back the Secret Service the Antigravity CLI (agy) stores its Google sign-in in.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends chromium fonts-roboto fonts-dejavu ca-certificates dbus gnome-keyring \
+ && apt-get install -y --no-install-recommends chromium fonts-roboto fonts-dejavu ca-certificates curl dbus gnome-keyring \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=4321 CHROME_PATH=/usr/bin/chromium TZ=Asia/Karachi
@@ -29,10 +29,14 @@ COPY --from=build /app/scripts/queue_worker.mjs ./scripts/queue_worker.mjs
 COPY --from=build /app/scripts/report.schema.json ./scripts/report.schema.json
 RUN mkdir -p .worker .worker-prod && chown -R node:node .worker .worker-prod
 # Antigravity CLI (agy), linux-x64, resolved from Google's updater manifest and sha512-verified.
-RUN set -e; node -e "(async()=>{const m=await(await fetch('https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json')).json();const b=Buffer.from(await(await fetch(m.url)).arrayBuffer());const {createHash}=require('crypto');if(createHash('sha512').update(b).digest('hex')!==m.sha512)throw new Error('agy download failed sha512 verification');require('fs').writeFileSync('/tmp/agy.tar.gz',b);console.log('agy',m.version)})().catch(e=>{console.error(e);process.exit(1)})" \
+# The tarball ships the binary as a single file named "antigravity"; the CLI installs it as "agy".
+RUN set -e; curl -fsSL --retry 3 https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json -o /tmp/agy-manifest.json \
+ && curl -fsSL --retry 3 -o /tmp/agy.tar.gz "$(node -p "require('/tmp/agy-manifest.json').url")" \
+ && echo "$(node -p "require('/tmp/agy-manifest.json').sha512")  /tmp/agy.tar.gz" | sha512sum -c - \
  && mkdir /tmp/agyx && tar -xzf /tmp/agy.tar.gz -C /tmp/agyx \
- && install -m 0755 "$(find /tmp/agyx -type f -name agy | head -1)" /usr/local/bin/agy \
- && rm -rf /tmp/agy.tar.gz /tmp/agyx
+ && install -m 0755 "$(find /tmp/agyx -type f | head -1)" /usr/local/bin/agy \
+ && /usr/local/bin/agy --version \
+ && rm -rf /tmp/agy.tar.gz /tmp/agyx /tmp/agy-manifest.json
 COPY docker/worker-entrypoint.sh /usr/local/bin/worker-entrypoint.sh
 RUN chmod 0755 /usr/local/bin/worker-entrypoint.sh
 USER node
