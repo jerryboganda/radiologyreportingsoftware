@@ -4,9 +4,12 @@ name: Build image
 on:
   push:
     branches: [main]
+    # Deliberately narrow: AGENTS.md and scripts/queue_worker.mjs run inside the container (the AI
+    # worker service on the VPS), so rulebook or worker-script edits must rebuild the image.
     paths-ignore:
-      - '**.md'
-      - 'scripts/**'
+      - 'README.md'
+      - 'DESIGN.md'
+      - 'PRODUCT.md'
       - 'start-app.cmd'
   workflow_dispatch:
 
